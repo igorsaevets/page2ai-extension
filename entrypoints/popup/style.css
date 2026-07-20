@@ -1,0 +1,253 @@
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f4f4f6;
+  --text: #1c1c22;
+  --text-dim: #6b6b76;
+  --border: #e2e2e8;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-text: #ffffff;
+  --ok: #16a34a;
+  --warn: #b45309;
+  --error: #dc2626;
+  --busy: #4f46e5;
+  --mono: ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17171c;
+    --bg-soft: #212129;
+    --text: #ececf1;
+    --text-dim: #9c9cab;
+    --border: #33333e;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --error: #f87171;
+    --busy: #818cf8;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, 'Segoe UI', sans-serif;
+}
+
+.popup {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.logo {
+  font: 700 12px/1 var(--mono);
+  color: var(--accent-text);
+  background: var(--accent);
+  border-radius: 5px;
+  padding: 4px 5px;
+  align-self: center;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.version {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.page-host {
+  color: var(--text-dim);
+  font-size: 11px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+}
+
+.btn {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.status {
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: var(--bg-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.status[data-tone='ok'] { color: var(--ok); }
+.status[data-tone='warn'] { color: var(--warn); }
+.status[data-tone='error'] { color: var(--error); }
+
+.status[data-tone='busy'] {
+  color: var(--busy);
+}
+
+.status[data-tone='busy']::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  border: 2px solid var(--busy);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -1px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.log summary,
+.preview summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  user-select: none;
+}
+
+.log ul {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  list-style: none;
+  max-height: 130px;
+  overflow-y: auto;
+  background: var(--bg-soft);
+  border-radius: 7px;
+  font: 10.5px/1.5 var(--mono);
+}
+
+.log li {
+  overflow-wrap: anywhere;
+}
+
+.log li[data-level='warn'] { color: var(--warn); }
+.log li[data-level='error'] { color: var(--error); }
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.stats {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions .btn {
+  flex: 1;
+}
+
+.preview textarea {
+  margin-top: 6px;
+  width: 100%;
+  height: 180px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: 10.5px/1.5 var(--mono);
+  padding: 8px;
+}

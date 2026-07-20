@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- This title becomes the action's default_title (tooltip). -->
+    <title>Page2MD — Extract as Markdown</title>
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">M↓</span>
+          <h1>Page2MD</h1>
+          <span class="version" id="version"></span>
+        </div>
+        <div class="page-host" id="page-host" title=""></div>
+      </header>
+
+      <section class="controls">
+        <label class="field">
+          <span class="field-label">Profile</span>
+          <select id="profile">
+            <option value="auto" selected>Auto-detect</option>
+            <option value="docs">Docs</option>
+            <option value="marketing">Marketing</option>
+            <option value="research">Research / Article</option>
+            <option value="wordpress-marketing">WordPress</option>
+            <option value="dashboard">Dashboard / App</option>
+          </select>
+        </label>
+        <button id="extract" class="btn primary">Extract Markdown</button>
+      </section>
+
+      <div id="status" class="status" hidden></div>
+
+      <details id="log" class="log" hidden>
+        <summary>Progress log (<span id="log-count">0</span>)</summary>
+        <ul id="log-list"></ul>
+      </details>
+
+      <section id="result" class="result" hidden>
+        <div id="stats" class="stats"></div>
+        <div class="actions">
+          <button id="copy" class="btn primary">Copy</button>
+          <button id="download" class="btn">Download .md</button>
+        </div>
+        <details class="preview">
+          <summary>Preview</summary>
+          <textarea id="preview-text" readonly spellcheck="false"></textarea>
+        </details>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
