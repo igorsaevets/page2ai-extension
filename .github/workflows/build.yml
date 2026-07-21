@@ -37,10 +37,22 @@ jobs:
       - name: Zip Chrome extension
         run: npx wxt zip -b chrome
 
+      - name: Locate zip artifact
+        id: zip
+        run: |
+          ZIP_PATH=$(ls .output/page2md-extension-*-chrome.zip 2>/dev/null | head -n 1)
+          if [ -z "$ZIP_PATH" ]; then
+            echo "::error::No Chrome zip produced under .output/"
+            ls -la .output/ || true
+            exit 1
+          fi
+          echo "path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          echo "Chrome zip: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
+
       - name: Upload Chrome zip
         uses: actions/upload-artifact@v4
         with:
           name: page2md-chrome-${{ github.sha }}
-          path: .output/*-chrome.zip
+          path: ${{ steps.zip.outputs.path }}
           if-no-files-found: error
           retention-days: 30
