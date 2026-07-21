@@ -77,6 +77,7 @@ jobs:
       #       https://github.com/fregante/chrome-webstore-upload/issues/114
       - name: Upload to Chrome Web Store
         if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         # SHA-pinned to v6.0.0 (2026-03-31). Update pin when bumping tag.
         uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4
         with:
