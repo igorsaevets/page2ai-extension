@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="public/icon/128.png" width="96" height="96" alt="Page2MD">
-  <h1>Page2MD</h1>
+  <img src="public/icon/128.png" width="96" height="96" alt="Page2AI">
+  <h1>Page2AI</h1>
   <p><strong>Convert any webpage to clean, AI-ready Markdown.</strong></p>
   <p>Chrome extension. 100% local. Open source. MIT.</p>
   <p>
@@ -13,14 +13,14 @@
 
 ---
 
-**Page2MD** is a one-click Chrome extension that turns any webpage into a clean Markdown document, ready to paste into Claude, ChatGPT, Cursor, or your RAG pipeline. Everything runs inside your browser — no servers, no accounts, no telemetry.
+**Page2AI** is a one-click Chrome extension that turns any webpage into a clean Markdown document, ready to paste into Claude, ChatGPT, Cursor, or your RAG pipeline. Everything runs inside your browser — no servers, no accounts, no telemetry.
 
 ## Features
 
 - **Profile-aware extraction.** Auto-detects the site kind (docs, marketing, research, dashboard, WordPress marketing) and tunes the strategy per profile.
 - **Tab dedup & code capture.** DOM-position-aware capture of tabbed panels (Python vs TypeScript vs cURL) with dedup — you get the code from every tab, not just the active one.
 - **MDX / JSX post-processing.** Turns Mintlify components (`<Note>`, `<CodeGroup>`, `<Tabs>`) into clean Markdown.
-- **`llms.txt` discovery.** If the site publishes an official `.md` alongside the page, Page2MD uses it directly (short path, best fidelity).
+- **`llms.txt` discovery.** If the site publishes an official `.md` alongside the page, Page2AI uses it directly (short path, best fidelity).
 - **Quality gate.** Counts `<pre>` blocks vs plain-text baseline to catch under-extraction, then falls back automatically.
 - **Structured data hoisting.** JSON-LD, OpenGraph, Microdata and internal state (Next.js `__NEXT_DATA__`, etc.) go into a machine-readable appendix.
 - **PII masking.** Optional patterns for emails, phones, SSN-like strings.
@@ -36,15 +36,15 @@ _Coming soon — link will be added after first CWS review._
 
 ```powershell
 # 1. Clone and build
-git clone https://github.com/igorsaevets/page2md-extension.git
-cd page2md-extension
+git clone https://github.com/igorsaevets/page2ai-extension.git
+cd page2ai-extension
 npm install
 npm run build
 
 # 2. In Chrome / Edge / Brave: chrome://extensions
 #    → enable "Developer mode"
 #    → "Load unpacked"
-#    → select page2md-extension\.output\chrome-mv3\
+#    → select page2ai-extension\.output\chrome-mv3\
 ```
 
 Pin the toolbar icon and hit `Alt+Shift+M` on any page.
@@ -52,16 +52,16 @@ Pin the toolbar icon and hit `Alt+Shift+M` on any page.
 ## Usage
 
 1. Open the page you want to convert.
-2. Click the Page2MD toolbar icon (or `Alt+Shift+M`).
+2. Click the Page2AI toolbar icon (or `Alt+Shift+M`).
 3. Pick a profile — or leave it on **Auto** (recommended).
 4. Click **Extract**. Live progress shows in the popup.
 5. Markdown is copied to your clipboard automatically. Optional: click **Download `.md`**.
 
-**Profiles:** `auto` (default), `docs` (Mintlify, Docusaurus, MkDocs), `marketing`, `wordpress-marketing`, `research`, `dashboard`. See [`lib/core/profiles.ts`](page2md-extension/lib/core/profiles.ts) for the tuning behind each.
+**Profiles:** `auto` (default), `docs` (Mintlify, Docusaurus, MkDocs), `marketing`, `wordpress-marketing`, `research`, `dashboard`. See [`lib/core/profiles.ts`](page2ai-extension/lib/core/profiles.ts) for the tuning behind each.
 
 ## Privacy
 
-**Page2MD does not send any data anywhere.**
+**Page2AI does not send any data anywhere.**
 
 - No analytics, no telemetry, no crash reports.
 - No cloud service. No account. No sign-in.

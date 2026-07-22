@@ -1,4 +1,4 @@
-// Page2MD e2e smoke test: loads the built extension into real Chrome,
+// Page2AI e2e smoke test: loads the built extension into real Chrome,
 // injects the extractor into a local test page using the exact two-step
 // executeScript sequence the background uses, then asserts on the result the
 // background cached in storage.session.
@@ -27,21 +27,21 @@ const CHROME_CANDIDATES = [
 
 const TEST_HTML = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Page2MD Test Fixture — Getting Started</title>
-<meta name="description" content="Fixture page for the Page2MD e2e smoke test.">
+<head><meta charset="utf-8"><title>Page2AI Test Fixture — Getting Started</title>
+<meta name="description" content="Fixture page for the Page2AI e2e smoke test.">
 <meta name="author" content="Igor Saevets">
 <meta name="keywords" content="markdown, chrome-extension, RAG">
-<meta property="og:title" content="Page2MD Test Fixture — OG Title Override">
+<meta property="og:title" content="Page2AI Test Fixture — OG Title Override">
 <meta property="og:description" content="OG description differs from meta name=description.">
 <meta property="og:image" content="https://example.com/og.png">
 <meta property="og:type" content="article">
-<meta property="og:site_name" content="Page2MD Docs">
+<meta property="og:site_name" content="Page2AI Docs">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-01-15T09:00:00Z">
 <meta property="article:modified_time" content="2026-06-30T12:00:00Z">
 <meta property="article:author" content="Igor Saevets">
 <meta property="article:section" content="Documentation">
-<meta property="article:tag" content="page2md">
+<meta property="article:tag" content="page2ai">
 <meta property="article:tag" content="markdown">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://example.com/twitter.png">
@@ -52,7 +52,7 @@ const TEST_HTML = `<!doctype html>
 <body>
 <main>
   <h1>Getting Started</h1>
-  <p>Install <strong>Page2MD</strong> and convert <em>any</em> page. Read the
+  <p>Install <strong>Page2AI</strong> and convert <em>any</em> page. Read the
   <a href="https://example.com/docs">full documentation</a> for details.</p>
 
   <h2>Install</h2>
@@ -60,8 +60,8 @@ const TEST_HTML = `<!doctype html>
     <button role="tab" id="tab-npm" aria-selected="true" aria-controls="panel-npm">npm</button>
     <button role="tab" id="tab-pnpm" aria-selected="false" aria-controls="panel-pnpm">pnpm</button>
   </div>
-  <div role="tabpanel" id="panel-npm" aria-labelledby="tab-npm">Run npm install page2md to get started.</div>
-  <div role="tabpanel" id="panel-pnpm" aria-labelledby="tab-pnpm" hidden>Run pnpm add page2md PNPM-SECRET-MARKER.</div>
+  <div role="tabpanel" id="panel-npm" aria-labelledby="tab-npm">Run npm install page2ai to get started.</div>
+  <div role="tabpanel" id="panel-pnpm" aria-labelledby="tab-pnpm" hidden>Run pnpm add page2ai PNPM-SECRET-MARKER.</div>
 
   <h2>Example</h2>
   <pre><code>const md = await extract(document);
@@ -169,7 +169,7 @@ try {
       func: (key, opts) => {
         globalThis[key] = opts;
       },
-      args: ['__page2mdOptions', { profile: 'auto' }],
+      args: ['__page2aiOptions', { profile: 'auto' }],
     });
     chrome.scripting
       .executeScript({ target: { tabId }, files: ['/extractor.js'] })
@@ -200,11 +200,11 @@ try {
   check('profile detected as docs (/docs/ path)', result.profile === 'docs', `profile=${result.profile}`);
   check('cached url matches', cached.url === pageUrl, cached.url);
   check('frontmatter has source', md.includes(`source: "${pageUrl}"`));
-  check('frontmatter has og_title (differs from plain title)', md.includes('og_title: "Page2MD Test Fixture — OG Title Override"'));
+  check('frontmatter has og_title (differs from plain title)', md.includes('og_title: "Page2AI Test Fixture — OG Title Override"'));
   check('frontmatter has og_description', md.includes('og_description: "OG description differs from meta name=description."'));
   check('frontmatter has og_image', md.includes('og_image: "https://example.com/og.png"'));
   check('frontmatter has og_type', md.includes('og_type: "article"'));
-  check('frontmatter has og_site_name', md.includes('og_site_name: "Page2MD Docs"'));
+  check('frontmatter has og_site_name', md.includes('og_site_name: "Page2AI Docs"'));
   check('frontmatter has og_locale', md.includes('og_locale: "en_US"'));
   check('frontmatter has twitter_card', md.includes('twitter_card: "summary_large_image"'));
   check('frontmatter has twitter_image (differs from og_image)', md.includes('twitter_image: "https://example.com/twitter.png"'));
@@ -213,7 +213,7 @@ try {
   check('frontmatter has author (article:author preferred)', md.includes('author: "Igor Saevets"'));
   check('frontmatter has section', md.includes('section: "Documentation"'));
   check('frontmatter has keywords', md.includes('keywords: "markdown, chrome-extension, RAG"'));
-  check('frontmatter has tags as YAML flow-sequence', md.includes('tags: ["page2md", "markdown"]'));
+  check('frontmatter has tags as YAML flow-sequence', md.includes('tags: ["page2ai", "markdown"]'));
   check('h1 rendered', md.includes('# Getting Started'));
   check('code fence rendered', md.includes('```'));
   check('table rendered', /\|\s*Option\s*\|/.test(md));

@@ -55,9 +55,9 @@ const html = `<!doctype html>
 </head>
 <body>
   <div class="row">
-    <img class="logo" src="${iconDataUrl}" alt="Page2MD">
+    <img class="logo" src="${iconDataUrl}" alt="Page2AI">
     <div class="text">
-      <div class="name">Page2MD</div>
+      <div class="name">Page2AI</div>
       <div class="tag">Any webpage <span class="arrow">→</span> clean,<br>AI-ready Markdown</div>
       <div class="badge">100% LOCAL &nbsp;&middot;&nbsp; OPEN SOURCE</div>
     </div>

@@ -6,14 +6,14 @@ import type { ExtractOptions, ExtractResult, ProgressLevel } from './types';
 
 /** popup → background: start extraction in the given tab. */
 export interface ExtractRequestMessage {
-  type: 'PAGE2MD_EXTRACT';
+  type: 'PAGE2AI_EXTRACT';
   tabId: number;
   options: ExtractOptions;
 }
 
 /** extractor → popup/background (or background → popup with explicit tabId). */
 export interface ProgressMessage {
-  type: 'PAGE2MD_PROGRESS';
+  type: 'PAGE2AI_PROGRESS';
   step: string;
   message: string;
   level: ProgressLevel;
@@ -23,11 +23,11 @@ export interface ProgressMessage {
 
 /** extractor → popup/background: extraction finished (ok, official-md or fallback). */
 export interface ResultMessage {
-  type: 'PAGE2MD_RESULT';
+  type: 'PAGE2AI_RESULT';
   result: ExtractResult;
 }
 
-export type Page2mdMessage = ExtractRequestMessage | ProgressMessage | ResultMessage;
+export type Page2aiMessage = ExtractRequestMessage | ProgressMessage | ResultMessage;
 
 /** background → popup: response to ExtractRequestMessage. */
 export interface ExtractAck {
@@ -45,9 +45,9 @@ export interface CachedResult {
 export const resultCacheKey = (tabId: number): string => `result:${tabId}`;
 
 /** Isolated-world global used to stage options for the file-injected extractor. */
-export const OPTIONS_GLOBAL_KEY = '__page2mdOptions';
+export const OPTIONS_GLOBAL_KEY = '__page2aiOptions';
 /** Isolated-world global guarding against concurrent runs in one tab. */
-export const RUNNING_GLOBAL_KEY = '__page2mdRunning';
+export const RUNNING_GLOBAL_KEY = '__page2aiRunning';
 
 /** Progress steps with special popup handling. */
 export const STEP_BUSY = 'busy';

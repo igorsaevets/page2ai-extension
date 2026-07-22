@@ -1,4 +1,4 @@
-// Page2MD default configuration and shared constants.
+// Page2AI default configuration and shared constants.
 // Values ported verbatim from Rev-032v2 prototype (Sections 3, 5, 16, 22).
 
 import type { ExtractorConfig } from './types';

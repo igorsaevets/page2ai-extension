@@ -127,7 +127,7 @@ ${popupCss}
     <header class="header">
       <div class="brand">
         <span class="logo" aria-hidden="true">M&darr;</span>
-        <h1>Page2MD</h1>
+        <h1>Page2AI</h1>
         <span class="version">v1.0.0</span>
       </div>
       <div class="page-host" title="${pageHost}">${pageHost}</div>

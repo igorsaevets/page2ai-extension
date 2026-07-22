@@ -30,7 +30,7 @@ export default defineUnlistedScript(async () => {
   // global flag is enough to prevent overlapping runs.
   if (g[RUNNING_GLOBAL_KEY]) {
     send({
-      type: 'PAGE2MD_PROGRESS',
+      type: 'PAGE2AI_PROGRESS',
       step: STEP_BUSY,
       message: 'Extraction is already running in this tab',
       level: 'warn',
@@ -44,9 +44,9 @@ export default defineUnlistedScript(async () => {
 
   try {
     const result = await runExtractor(options, (step, message, level) => {
-      send({ type: 'PAGE2MD_PROGRESS', step, message, level: level ?? 'info' });
+      send({ type: 'PAGE2AI_PROGRESS', step, message, level: level ?? 'info' });
     });
-    send({ type: 'PAGE2MD_RESULT', result });
+    send({ type: 'PAGE2AI_RESULT', result });
   } finally {
     g[RUNNING_GLOBAL_KEY] = false;
   }

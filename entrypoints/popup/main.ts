@@ -11,7 +11,7 @@ import {
   type CachedResult,
   type ExtractAck,
   type ExtractRequestMessage,
-  type Page2mdMessage,
+  type Page2aiMessage,
 } from '~/lib/messages';
 import type { AutoProfile, ExtractResult } from '~/lib/types';
 
@@ -148,13 +148,13 @@ const onFreshResult = async (result: ExtractResult): Promise<void> => {
 };
 
 const onMessage = (message: unknown, sender: { tab?: { id?: number } }): void => {
-  const msg = message as Page2mdMessage;
+  const msg = message as Page2aiMessage;
   // Messages from content scripts carry sender.tab; background-originated
   // progress carries an explicit tabId. Ignore other tabs' traffic.
-  const senderTabId = sender.tab?.id ?? (msg.type === 'PAGE2MD_PROGRESS' ? msg.tabId : undefined);
+  const senderTabId = sender.tab?.id ?? (msg.type === 'PAGE2AI_PROGRESS' ? msg.tabId : undefined);
   if (senderTabId != null && senderTabId !== activeTabId) return;
 
-  if (msg.type === 'PAGE2MD_PROGRESS') {
+  if (msg.type === 'PAGE2AI_PROGRESS') {
     appendLog(msg.step, msg.message, msg.level);
     if (msg.step === STEP_INJECT_ERROR) {
       setExtracting(false);
@@ -166,7 +166,7 @@ const onMessage = (message: unknown, sender: { tab?: { id?: number } }): void =>
     }
     return;
   }
-  if (msg.type === 'PAGE2MD_RESULT') {
+  if (msg.type === 'PAGE2AI_RESULT') {
     void onFreshResult(msg.result);
   }
 };
@@ -182,7 +182,7 @@ const startExtract = async (): Promise<void> => {
   setStatus('Starting extraction…', 'busy');
 
   const request: ExtractRequestMessage = {
-    type: 'PAGE2MD_EXTRACT',
+    type: 'PAGE2AI_EXTRACT',
     tabId: activeTabId,
     options: { profile: el.profile.value as AutoProfile },
   };

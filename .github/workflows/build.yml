@@ -40,7 +40,7 @@ jobs:
       - name: Locate zip artifact
         id: zip
         run: |
-          ZIP_PATH=$(ls .output/page2md-extension-*-chrome.zip 2>/dev/null | head -n 1)
+          ZIP_PATH=$(ls .output/page2ai-extension-*-chrome.zip 2>/dev/null | head -n 1)
           if [ -z "$ZIP_PATH" ]; then
             echo "::error::No Chrome zip produced under .output/"
             ls -la .output/ || true
@@ -52,7 +52,7 @@ jobs:
       - name: Upload Chrome zip
         uses: actions/upload-artifact@v4
         with:
-          name: page2md-chrome-${{ github.sha }}
+          name: page2ai-chrome-${{ github.sha }}
           path: ${{ steps.zip.outputs.path }}
           if-no-files-found: error
           retention-days: 30

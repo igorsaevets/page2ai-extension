@@ -1,4 +1,4 @@
-# Chrome Web Store — Page2MD listing draft
+# Chrome Web Store — Page2AI listing draft
 
 > Copy each field into the Chrome Web Store Developer Dashboard when submitting.
 > All limits verified against `developer.chrome.com` on 2026-07-20.
@@ -9,7 +9,7 @@
 
 ### Title (visible in search + install button)
 ```
-Page2MD — Webpage to Markdown
+Page2AI — Webpage to Markdown
 ```
 _29 chars. Well under Google's soft cap (~45)._
 
@@ -32,7 +32,7 @@ English (Worldwide)
 
 ### Detailed description
 ```
-Page2MD turns any webpage into a clean, AI-ready Markdown document with one click. Paste it straight into Claude, ChatGPT, Cursor, or your RAG pipeline.
+Page2AI turns any webpage into a clean, AI-ready Markdown document with one click. Paste it straight into Claude, ChatGPT, Cursor, or your RAG pipeline.
 
 Everything runs inside your browser. No servers. No accounts. No telemetry. No cloud.
 
@@ -41,7 +41,7 @@ WHAT MAKES IT DIFFERENT
 • Profile-aware extraction — auto-detects the site kind (docs, marketing, research, dashboard) and tunes the strategy per profile. Manual override in one click.
 • Tab & dropdown capture — extracts code from hidden tabs (Python vs TypeScript vs cURL vs …) with DOM-position-aware dedup, so you get the code from every tab, not just the active one.
 • MDX / JSX post-processing — Mintlify components (<Note>, <CodeGroup>, <Tabs>, <AccordionGroup>) become plain Markdown.
-• llms.txt short path — if the site publishes an official .md alongside the page, Page2MD uses it directly.
+• llms.txt short path — if the site publishes an official .md alongside the page, Page2AI uses it directly.
 • Quality gate — post-extraction check on <pre> count vs a plain-text baseline; automatic fallback if under-extraction is detected.
 • Structured-data appendix — JSON-LD, OpenGraph, Microdata, Next.js __NEXT_DATA__ hoisted into a machine-readable appendix at the end.
 • Cached-result recovery — close the popup mid-extraction, reopen it, your result is waiting (badge shows ✓).
@@ -49,7 +49,7 @@ WHAT MAKES IT DIFFERENT
 
 PRIVACY
 
-Page2MD does not send data anywhere. No analytics, no telemetry, no crash reports, no cloud service, no accounts, no remote code. The extension only reads the tab you explicitly click on (via activeTab), converts it to Markdown on your device, and copies it to your clipboard. Everything else is preferences stored locally in chrome.storage.
+Page2AI does not send data anywhere. No analytics, no telemetry, no crash reports, no cloud service, no accounts, no remote code. The extension only reads the tab you explicitly click on (via activeTab), converts it to Markdown on your device, and copies it to your clipboard. Everything else is preferences stored locally in chrome.storage.
 
 MINIMUM PERMISSIONS
 
@@ -62,7 +62,7 @@ No <all_urls>. No host_permissions. No tabs API. Chrome will not warn you that t
 
 OPEN SOURCE
 
-MIT-licensed. Full source at github.com/igorsaevets/page2md-extension. Verify every claim in this listing against the code.
+MIT-licensed. Full source at github.com/igorsaevets/page2ai-extension. Verify every claim in this listing against the code.
 
 HOTKEY
 
@@ -99,7 +99,7 @@ Content: brand mark + tagline "Any webpage → clean, AI-ready Markdown"
 Files: assets/store/screenshot-{1..N}-1280x800.png
 Size: 1280×800 PNG (or 640×400)
 Orientation: landscape only (portrait not supported by CWS)
-Content: real Page2MD popup + real extraction result on real docs pages
+Content: real Page2AI popup + real extraction result on real docs pages
 ```
 
 ### Marquee promo tile (OPTIONAL)
@@ -113,7 +113,7 @@ Not shipped in v1.0. Only needed for CWS "featured" placement, which we do not n
 
 ### Single Purpose statement
 ```
-Page2MD extracts the content of the active browser tab and converts it into a clean Markdown document, then places that Markdown on the user's clipboard.
+Page2AI extracts the content of the active browser tab and converts it into a clean Markdown document, then places that Markdown on the user's clipboard.
 ```
 
 ### Data collection disclosures
@@ -131,7 +131,7 @@ For each item in the CWS privacy form, tick **NO / not collected**:
 - Website content → NO
 - Other → NO
 
-_Rationale: Page2MD reads webpage content only in-memory during a single extraction the user actively triggered, converts it, writes it to the clipboard, and drops it. Nothing is stored beyond the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes) and the user's own profile preference (`chrome.storage.local`, on-device only). No "collection" in the sense the CWS form defines — nothing leaves the device._
+_Rationale: Page2AI reads webpage content only in-memory during a single extraction the user actively triggered, converts it, writes it to the clipboard, and drops it. Nothing is stored beyond the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes) and the user's own profile preference (`chrome.storage.local`, on-device only). No "collection" in the sense the CWS form defines — nothing leaves the device._
 
 ### Certifications (all THREE must be checked)
 
@@ -141,7 +141,7 @@ _Rationale: Page2MD reads webpage content only in-memory during a single extract
 
 ### Privacy policy URL
 ```
-https://github.com/igorsaevets/page2md-extension/blob/main/PRIVACY.md
+https://github.com/igorsaevets/page2ai-extension/blob/main/PRIVACY.md
 ```
 _Required even for local-only extensions — CWS User Data FAQ Q14 ([source](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq))._
 
@@ -153,7 +153,7 @@ Enter each of the four below into the corresponding "justify" text box on the Pr
 
 ### `activeTab` — justification
 ```
-Grants Page2MD access to the currently active tab only when the user explicitly acts on the extension — clicking the toolbar icon or pressing the Alt+Shift+M keyboard shortcut. Required to read the page content the user asked to convert. Not persistent, not blanket, and cannot be used to read any other tab or any tab the user did not act on.
+Grants Page2AI access to the currently active tab only when the user explicitly acts on the extension — clicking the toolbar icon or pressing the Alt+Shift+M keyboard shortcut. Required to read the page content the user asked to convert. Not persistent, not blanket, and cannot be used to read any other tab or any tab the user did not act on.
 ```
 
 ### `scripting` — justification
@@ -163,7 +163,7 @@ Required to programmatically inject the extraction script (extractor.js) into th
 
 ### `clipboardWrite` — justification
 ```
-Required to copy the generated Markdown result to the user's clipboard automatically at the end of extraction — the primary reason the user invoked the extension. Page2MD does not request clipboardRead and never reads the user's clipboard contents.
+Required to copy the generated Markdown result to the user's clipboard automatically at the end of extraction — the primary reason the user invoked the extension. Page2AI does not request clipboardRead and never reads the user's clipboard contents.
 ```
 
 ### `storage` — justification
@@ -176,7 +176,7 @@ Used exclusively to persist the user's own extension preferences locally on thei
 Answer: No, I am not using remote code.
 ```
 
-_Rationale: All JavaScript executed by Page2MD ships inside the extension bundle installed from the Chrome Web Store. The extension performs no eval(), Function() constructor calls, dynamic import() of remote URLs, or fetch()-then-execute of remote scripts. It does not fetch code — it only reads the DOM of the page the user is already viewing. ([Definition per developer.chrome.com](https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements).)_
+_Rationale: All JavaScript executed by Page2AI ships inside the extension bundle installed from the Chrome Web Store. The extension performs no eval(), Function() constructor calls, dynamic import() of remote URLs, or fetch()-then-execute of remote scripts. It does not fetch code — it only reads the DOM of the page the user is already viewing. ([Definition per developer.chrome.com](https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements).)_
 
 ---
 
@@ -214,17 +214,17 @@ _Valid choice for a free, hobbyist, open-source utility with no monetization. Go
 
 ### Homepage URL
 ```
-https://github.com/igorsaevets/page2md-extension
+https://github.com/igorsaevets/page2ai-extension
 ```
 
 ### Support URL
 ```
-https://github.com/igorsaevets/page2md-extension/issues
+https://github.com/igorsaevets/page2ai-extension/issues
 ```
 
 ### Privacy policy URL (repeat from §3)
 ```
-https://github.com/igorsaevets/page2md-extension/blob/main/PRIVACY.md
+https://github.com/igorsaevets/page2ai-extension/blob/main/PRIVACY.md
 ```
 
 ### Verified publisher (OPTIONAL)

@@ -9,7 +9,7 @@ import {
   type CachedResult,
   type ExtractAck,
   type ExtractRequestMessage,
-  type Page2mdMessage,
+  type Page2aiMessage,
   type ProgressMessage,
 } from '~/lib/messages';
 
@@ -36,7 +36,7 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
     .executeScript({ target: { tabId }, files: ['/extractor.js'] })
     .catch((e) => {
       const msg: ProgressMessage = {
-        type: 'PAGE2MD_PROGRESS',
+        type: 'PAGE2AI_PROGRESS',
         step: STEP_INJECT_ERROR,
         message: `Failed to inject extractor: ${errorText(e)}`,
         level: 'error',
@@ -48,16 +48,16 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    const msg = message as Page2mdMessage;
+    const msg = message as Page2aiMessage;
 
-    if (msg?.type === 'PAGE2MD_EXTRACT') {
+    if (msg?.type === 'PAGE2AI_EXTRACT') {
       startExtraction(msg)
         .then(() => sendResponse({ ok: true } satisfies ExtractAck))
         .catch((e) => sendResponse({ ok: false, error: errorText(e) } satisfies ExtractAck));
       return true; // keep the channel open for the async response
     }
 
-    if (msg?.type === 'PAGE2MD_RESULT' && sender.tab?.id != null) {
+    if (msg?.type === 'PAGE2AI_RESULT' && sender.tab?.id != null) {
       const tabId = sender.tab.id;
       const cached: CachedResult = {
         result: msg.result,

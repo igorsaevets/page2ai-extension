@@ -52,7 +52,7 @@ import type {
   ResolvedConfig,
 } from '../types';
 
-const EXTRACTOR_NAME = 'Page2MD';
+const EXTRACTOR_NAME = 'Page2AI';
 const EXTRACTOR_REVISION = 'Rev-032v2-TS';
 
 export const createAppendix = (): AppendixData => ({

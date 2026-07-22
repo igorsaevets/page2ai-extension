@@ -1,4 +1,4 @@
-// Page2MD popup e2e: exercises the real user flow — toolbar click opens the
+// Page2AI popup e2e: exercises the real user flow — toolbar click opens the
 // popup, Extract runs against a fixture tab, the result renders, and a
 // re-opened popup recovers the cached result from storage.session.
 //
@@ -22,13 +22,13 @@ const CHROME_CANDIDATES = [
 
 const TEST_HTML = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Page2MD Popup Fixture</title>
+<head><meta charset="utf-8"><title>Page2AI Popup Fixture</title>
 <meta name="description" content="Fixture for the popup e2e test."></head>
 <body>
 <main>
   <h1>Getting Started</h1>
   <p>Some <strong>content</strong> with a <a href="https://example.com/x">link</a>.</p>
-  <pre><code>npm install page2md</code></pre>
+  <pre><code>npm install page2ai</code></pre>
   <ul><li>Alpha</li><li>Beta</li></ul>
 </main>
 </body>

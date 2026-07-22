@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Page2MD are documented here.
+All notable changes to Page2AI are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -8,8 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **Tab capture no longer accumulates unbounded wall time on multi-group pages.** Every individual click was already bounded by [`waitForDomToSettle`](page2md-extension/lib/core/dom.ts:507)'s `tabClickWaitMs` (default 700 ms) — but a page with 30+ tab groups × up to 16 buttons could still stretch tab-phase wall time past a minute on the aggregate, blocking the rest of extraction (dropdowns, main render, quality gate). New cumulative `tabPhaseBudgetMs` (default 60 000 ms) — when exceeded, remaining tab groups are skipped via the same sticky `state.tabCaptureAborted` flag introduced in 1.0.1. Progress log records exactly how many groups were skipped.
-- **Test-harness race fixed.** `.test/real-sites-{retry,test}.mjs` used to poll `chrome.storage.session` on a 1-second interval with a hard deadline; if the extractor finished a few milliseconds before deadline, the `PAGE2MD_RESULT` message reached the SW listener but background's `storage.session.set` hadn't flushed yet — the harness reported a false timeout (session #8 vLLM regression). Harness now installs an extra SW listener that stamps a per-tab result marker; polling tightens to 100 ms once the marker is set, and a 5-second grace poll runs if the deadline expires with a marker present.
+- **Tab capture no longer accumulates unbounded wall time on multi-group pages.** Every individual click was already bounded by [`waitForDomToSettle`](page2ai-extension/lib/core/dom.ts:507)'s `tabClickWaitMs` (default 700 ms) — but a page with 30+ tab groups × up to 16 buttons could still stretch tab-phase wall time past a minute on the aggregate, blocking the rest of extraction (dropdowns, main render, quality gate). New cumulative `tabPhaseBudgetMs` (default 60 000 ms) — when exceeded, remaining tab groups are skipped via the same sticky `state.tabCaptureAborted` flag introduced in 1.0.1. Progress log records exactly how many groups were skipped.
+- **Test-harness race fixed.** `.test/real-sites-{retry,test}.mjs` used to poll `chrome.storage.session` on a 1-second interval with a hard deadline; if the extractor finished a few milliseconds before deadline, the `PAGE2AI_RESULT` message reached the SW listener but background's `storage.session.set` hadn't flushed yet — the harness reported a false timeout (session #8 vLLM regression). Harness now installs an extra SW listener that stamps a per-tab result marker; polling tightens to 100 ms once the marker is set, and a 5-second grace poll runs if the deadline expires with a marker present.
 
 ### Added
 
@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ExtractorState` gains `tabPhaseStartMs: number | null`.
 - e2e smoke still passes 31/31 (frontmatter enrichment + tab capture) with no config overrides — new defaults do not activate on the fixture page.
 
-[1.0.2]: https://github.com/igorsaevets/page2md-extension/releases/tag/v1.0.2
+[1.0.2]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.0.2
 
 ## [1.0.1] — 2026-07-20
 
@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `buildFrontmatter` uses shared `yq` helper (single-source YAML escape); `findJsonLdField` reads scalar / Person.name / arrays from the JSON-LD graph.
 - e2e smoke asserts 14 additional frontmatter fields (total 31/31 checks passing).
 
-[1.0.1]: https://github.com/igorsaevets/page2md-extension/releases/tag/v1.0.1
+[1.0.1]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.0.1
 
 ## [1.0.0] — 2026-07-20
 
@@ -49,7 +49,7 @@ Initial public release.
 
 - **One-click extraction** — click the toolbar icon or press `Alt+Shift+M`, get the current page as clean Markdown in your clipboard.
 - **Profile system** — auto-detects the site type (docs, marketing, WordPress-marketing, research, dashboard) and adjusts strategy; manual override in the popup.
-- **`llms.txt` short path** — if the site publishes an official `.md` sibling for the page, Page2MD uses it directly (with a fidelity check).
+- **`llms.txt` short path** — if the site publishes an official `.md` sibling for the page, Page2AI uses it directly (with a fidelity check).
 - **Tab / dropdown capture** — extracts code samples from hidden tabs (Python vs TypeScript vs cURL vs…) with DOM-position-aware dedup; captures collapsed `<details>` and dropdown menus.
 - **MDX / JSX post-processing** — Mintlify `<Note>`, `<CodeGroup>`, `<Tabs>`, `<AccordionGroup>` become clean Markdown.
 - **Quality gate** — post-extraction check on `<pre>` count vs plain-text baseline; automatic fallback to a permissive rendering if under-extraction is detected.
@@ -63,7 +63,7 @@ Initial public release.
 
 - **Minimum permissions**: `activeTab`, `scripting`, `clipboardWrite`, `storage`. No `<all_urls>`, no `host_permissions`, no `tabs` API — Chrome will not warn the user that the extension can read all sites, because it cannot.
 - **On-demand injection** via `chrome.scripting.executeScript` — no `content_scripts` registered in the manifest, so the extension runs on zero pages until you act.
-- **No network requests** to any server operated by Page2MD or the publisher. See [PRIVACY.md](PRIVACY.md).
+- **No network requests** to any server operated by Page2AI or the publisher. See [PRIVACY.md](PRIVACY.md).
 - **No remote code** — everything runs from the bundled extension package.
 
 ### Technical
@@ -77,4 +77,4 @@ Initial public release.
 
 Verified against real production pages: uscis.gov (marketing profile), docs.openwebui.com (docs + `llms.txt` short path), docs.x.ai (docs + tab capture), and others.
 
-[1.0.0]: https://github.com/igorsaevets/page2md-extension/releases/tag/v1.0.0
+[1.0.0]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.0.0

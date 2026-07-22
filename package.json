@@ -1,18 +1,18 @@
 {
-  "name": "page2md-extension",
+  "name": "page2ai-extension",
   "description": "Convert any webpage to clean, AI-ready Markdown. Chrome extension. 100% local, open source.",
   "private": true,
   "version": "1.0.2",
   "type": "module",
   "author": "Igor Saevets, AI Expert and Entrepreneur",
   "license": "MIT",
-  "homepage": "https://github.com/igorsaevets/page2md-extension",
+  "homepage": "https://github.com/igorsaevets/page2ai-extension",
   "repository": {
     "type": "git",
-    "url": "https://github.com/igorsaevets/page2md-extension.git"
+    "url": "https://github.com/igorsaevets/page2ai-extension.git"
   },
   "bugs": {
-    "url": "https://github.com/igorsaevets/page2md-extension/issues"
+    "url": "https://github.com/igorsaevets/page2ai-extension/issues"
   },
   "keywords": [
     "chrome-extension",

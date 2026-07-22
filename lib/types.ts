@@ -1,4 +1,4 @@
-// Page2MD core types.
+// Page2AI core types.
 // Ported from Rev-032v2 prototype (Sequential AI Markdown Exporter).
 
 export type ProfileName =

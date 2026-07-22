@@ -3,10 +3,10 @@ import { defineConfig } from 'wxt';
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   manifest: ({ mode }) => ({
-    name: 'Page2MD — Webpage to Markdown',
+    name: 'Page2AI — Webpage to Markdown',
     description: 'Convert any webpage to clean, AI-ready Markdown. 100% local, open source.',
     author: { email: 'igorsaevets@gmail.com' },
-    homepage_url: 'https://github.com/igorsaevets/page2md-extension',
+    homepage_url: 'https://github.com/igorsaevets/page2ai-extension',
     permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage'],
     commands: {
       // Opens the popup, which drives extraction. Ctrl+Shift+M is taken by
@@ -19,7 +19,7 @@ export default defineConfig({
       },
     },
     action: {
-      default_title: 'Page2MD — Extract as Markdown',
+      default_title: 'Page2AI — Extract as Markdown',
     },
     // The e2e build grants localhost host access so the smoke test can call
     // scripting.executeScript without the activeTab user gesture. Never ships.
