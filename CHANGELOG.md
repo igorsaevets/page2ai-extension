@@ -4,6 +4,27 @@ All notable changes to Page2AI are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-07-22
+
+### Added
+
+- **Code block language detection from sibling/parent elements.** `renderCodeBlock` now searches for language labels outside the `<pre>`/`<code>` element — checks `data-language`/`data-lang` attributes up the DOM chain (code → pre → parent → grandparent), CSS `language-xxx` classes, language label elements matched by CSS selectors (`.lang-label`, `.code-language`, etc.), and single-word sibling text validated against a 130+ entry known-languages set. Covers Docusaurus, Starlight, Shiki, Expressive Code, GitHub Docs, and other modern doc frameworks. Fixes the reported "Shell" label not appearing in Markdown fence info string.
+- **Code block title extraction.** Captures titles from `data-title`/`data-filename`/`data-code-title` attributes, `figcaption`, and elements matched by title selectors (`.codeBlockTitle`, `.remark-code-title`, `.code-title`, etc.). Titles appear in the fence info string as `title="..."` — e.g. `` ```json title="config.json: Main configuration" ``. Fixes the reported missing "opencode.json: Chat Completions adapter (fallback)" content.
+- **Mermaid diagram detection.** `<pre class="mermaid">` blocks now get `lang=mermaid` in the fence info string.
+- **Language inference from filename.** When a code block has a title containing a file extension but no explicit language, the language is inferred (e.g. `config.json` → `json`).
+
+### Fixed
+
+- **Shiki line numbers no longer leak into code text.** `extractShiki()` now filters out `.line-number` and `.ln` elements from the collected lines.
+- **Deep DOM stack overflow protection.** `renderNode` now returns empty for depth > 120, preventing stack overflow on maliciously or accidentally deep DOM trees.
+
+### Internal
+
+- `extractNearbyMeta(pre)` helper with `normalizeLang()` validation, `KNOWN_LANGS` set, `CODE_TITLE_SELECTORS`, `CODE_LANG_SELECTORS`.
+- e2e smoke tests extended to 34 checks (+3: sibling language label, title in fence info, data-language attribute).
+
+[1.1.0]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.1.0
+
 ## [1.0.2] — 2026-07-20
 
 ### Fixed

@@ -67,6 +67,19 @@ const TEST_HTML = `<!doctype html>
   <pre><code>const md = await extract(document);
 console.log(md.length);</code></pre>
 
+  <h2>Code Block Metadata</h2>
+  <div class="code-wrapper">
+    <div class="code-header"><span class="lang-label">Shell</span></div>
+    <pre><code>curl -X POST https://api.example.com/v1</code></pre>
+  </div>
+  <div class="highlight">
+    <div class="codeBlockTitle">config.json: Main configuration file</div>
+    <pre><code class="language-json">{"key": "value"}</code></pre>
+  </div>
+  <div data-language="python">
+    <pre><code>print("hello world")</code></pre>
+  </div>
+
   <h2>Options</h2>
   <table>
     <thead><tr><th>Option</th><th>Default</th></tr></thead>
@@ -216,6 +229,9 @@ try {
   check('frontmatter has tags as YAML flow-sequence', md.includes('tags: ["page2ai", "markdown"]'));
   check('h1 rendered', md.includes('# Getting Started'));
   check('code fence rendered', md.includes('```'));
+  check('code block lang from sibling label', md.includes('```shell'));
+  check('code block title in fence info', md.includes('title="config.json: Main configuration file"'));
+  check('code block lang from data-language attr', md.includes('```python'));
   check('table rendered', /\|\s*Option\s*\|/.test(md));
   check('link rendered', md.includes('](https://example.com/docs)'));
   check('hidden tab panel captured via click', md.includes('PNPM-SECRET-MARKER'));

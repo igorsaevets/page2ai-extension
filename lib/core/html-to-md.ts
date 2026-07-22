@@ -338,12 +338,211 @@ export const renderTable = (table: HTMLTableElement, depth: number): string[] =>
   return lines;
 };
 
+// --- Code block metadata extraction (v1.1) ---
+// Searches parent/sibling elements for language labels and titles that live
+// outside the <pre>/<code> element itself \u2014 covers Docusaurus, Starlight,
+// Shiki, Expressive Code, GitHub Docs, and other modern doc frameworks.
+
+const KNOWN_LANGS = new Set([
+  'bash', 'sh', 'shell', 'zsh', 'fish',
+  'python', 'py', 'python3',
+  'javascript', 'js', 'mjs', 'cjs',
+  'typescript', 'ts', 'tsx', 'jsx',
+  'json', 'jsonc', 'json5',
+  'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg',
+  'html', 'htm', 'xhtml', 'css', 'scss', 'sass', 'less',
+  'xml', 'xsl', 'svg',
+  'go', 'golang', 'rust', 'rs',
+  'java', 'kotlin', 'kt', 'scala', 'groovy',
+  'c', 'cpp', 'cxx', 'h', 'hpp',
+  'csharp', 'cs', 'fsharp', 'fs',
+  'swift', 'objc',
+  'ruby', 'rb', 'php', 'perl', 'pl', 'lua', 'r', 'dart',
+  'elixir', 'ex', 'clojure', 'clj', 'haskell', 'hs', 'erlang', 'erl',
+  'julia', 'jl', 'zig', 'nim', 'ocaml', 'ml', 'gleam', 'odin', 'v',
+  'sql', 'mysql', 'postgresql', 'postgres', 'sqlite', 'plsql', 'tsql',
+  'graphql', 'gql', 'protobuf', 'proto',
+  'dockerfile', 'docker', 'makefile', 'make', 'cmake',
+  'terraform', 'tf', 'hcl', 'nix',
+  'powershell', 'ps1', 'pwsh', 'batch', 'bat', 'cmd',
+  'text', 'txt', 'plaintext',
+  'markdown', 'md', 'mdx',
+  'latex', 'tex', 'matlab', 'octave',
+  'mermaid', 'diff', 'patch',
+  'http', 'curl', 'nginx', 'apache',
+  'log', 'env', 'dotenv',
+  'prisma', 'solidity', 'sol', 'wasm', 'wat',
+  'assembly', 'asm', 'nasm',
+  'wgsl', 'glsl', 'hlsl',
+]);
+
+const CODE_TITLE_SELECTORS = [
+  'figcaption',
+  '[data-code-title]', '[data-file-name]', '[data-title]', '[data-filename]',
+  '[class*="codeBlockTitle"]', '[class*="code-block-title"]',
+  '.remark-code-title',
+  '[class*="code-title"]', '[class*="file-name"]', '[class*="fileName"]',
+  '[class*="filename"]',
+].join(',');
+
+const CODE_LANG_SELECTORS = [
+  '[data-testid="code-language"]',
+  '[class*="language-label"]', '[class*="lang-label"]',
+  '[class*="code-language"]', '[class*="lang-badge"]',
+  '[class*="codeLanguage"]',
+  '.code-header [class*="language"]',
+  '.code-block-header [class*="lang"]',
+].join(',');
+
+const normalizeLang = (raw: string, strict = false): string => {
+  const t = cleanInline(raw).trim();
+  if (!t || t.length > 30) return '';
+  const low = t.toLowerCase();
+  if (KNOWN_LANGS.has(low)) return low;
+  if (strict) return '';
+  if (/^[a-z][a-z0-9_+#.-]*$/i.test(t) && t.split(/\s+/).length === 1 && t.length <= 16) return low;
+  return '';
+};
+
+interface CodeBlockMeta {
+  lang: string;
+  title: string;
+}
+
+const extractNearbyMeta = (pre: Element): CodeBlockMeta => {
+  const codeEl = pre.querySelector('code') || pre;
+  let lang = '';
+  let title = '';
+
+  const parent = pre.parentElement;
+  const grandparent = parent?.parentElement;
+  const chain: (Element | null | undefined)[] = [codeEl, pre, parent, grandparent];
+
+  for (const e of chain) {
+    if (!e) continue;
+    if (!lang) {
+      const dl = e.getAttribute('data-language') || e.getAttribute('data-lang');
+      if (dl) lang = normalizeLang(dl);
+    }
+    if (!title) {
+      const dt =
+        e.getAttribute('data-title') ||
+        e.getAttribute('data-file') ||
+        e.getAttribute('data-filename') ||
+        e.getAttribute('data-code-title');
+      if (dt) title = cleanInline(dt).slice(0, 200);
+    }
+  }
+
+  if (!lang) {
+    for (const e of chain) {
+      if (!e || typeof e.className !== 'string') continue;
+      const m = e.className.match(/language-([a-z0-9_+#.-]+)/i);
+      if (m) {
+        lang = normalizeLang(m[1]);
+        if (lang) break;
+      }
+    }
+  }
+
+  if (!lang) {
+    for (const e of chain) {
+      if (!e || typeof e.className !== 'string') continue;
+      if (/\bmermaid\b/i.test(e.className)) {
+        lang = 'mermaid';
+        break;
+      }
+    }
+  }
+
+  if (!lang && parent) {
+    const searchRoots: Element[] = [parent];
+    if (pre.previousElementSibling) searchRoots.push(pre.previousElementSibling);
+    if (parent.previousElementSibling) searchRoots.push(parent.previousElementSibling);
+    if (grandparent) searchRoots.push(grandparent);
+    for (const root of searchRoots) {
+      try {
+        const el = root.matches(CODE_LANG_SELECTORS)
+          ? root
+          : root.querySelector(CODE_LANG_SELECTORS);
+        if (el) {
+          const n = normalizeLang(el.textContent || '');
+          if (n) { lang = n; break; }
+        }
+      } catch { /* selector unsupported */ }
+    }
+  }
+
+  if (!lang) {
+    const candidates: (Element | null)[] = [
+      pre.previousElementSibling,
+      parent?.firstElementChild !== pre ? (parent?.firstElementChild ?? null) : null,
+    ];
+    for (const c of candidates) {
+      if (!c || c === pre || c.querySelector('pre,code')) continue;
+      const txt = cleanInline(c.textContent || '').trim();
+      if (txt && txt.split(/\s+/).length === 1) {
+        const n = normalizeLang(txt, true);
+        if (n) { lang = n; break; }
+      }
+    }
+  }
+
+  if (!title && parent) {
+    const searchRoots: (Element | null | undefined)[] = [parent, grandparent, pre];
+    for (const root of searchRoots) {
+      if (!root) continue;
+      try {
+        const tEl = root.querySelector(CODE_TITLE_SELECTORS) as HTMLElement | null;
+        if (tEl) {
+          const txt = cleanInline(tEl.textContent || '');
+          if (txt && txt.length <= 200) {
+            if (normalizeLang(txt, true) !== lang || !lang) {
+              title = txt;
+              break;
+            }
+          }
+        }
+      } catch { /* selector unsupported */ }
+    }
+    if (!title && parent.tagName === 'FIGURE') {
+      const cap = parent.querySelector(':scope > figcaption');
+      if (cap) {
+        const txt = cleanInline(cap.textContent || '');
+        if (txt && txt.length <= 200) title = txt;
+      }
+    }
+  }
+
+  if (!title) {
+    const preTitle = pre.getAttribute('title');
+    if (preTitle) {
+      const txt = cleanInline(preTitle);
+      if (txt && txt.length <= 200) {
+        if (normalizeLang(txt, true) !== lang || !lang) title = txt;
+      }
+    }
+  }
+
+  if (!lang && title) {
+    const m = title.match(/\.([a-z0-9]+)(?:\s|:|$)/i);
+    if (m) {
+      const inferred = normalizeLang(m[1], true);
+      if (inferred) lang = inferred;
+    }
+  }
+
+  return { lang, title };
+};
+
 // --- Code block rendering (Section 30) ---
 
 export const renderCodeBlock = (ctx: ExtractContext, el: Element): string[] => {
   const codeEl = el.querySelector('code') || el;
   const extractShiki = (): string => {
-    const ls = [...codeEl.querySelectorAll(':scope > .line, .line')];
+    const ls = [...codeEl.querySelectorAll(':scope > .line, .line')].filter(
+      (l) => !l.classList.contains('line-number') && !l.classList.contains('ln'),
+    );
     if (!ls.length) return '';
     return ls
       .map((l) => String(l.textContent || '').replace(/\u00a0/g, ' ').replace(/\r/g, ''))
@@ -375,14 +574,15 @@ export const renderCodeBlock = (ctx: ExtractContext, el: Element): string[] => {
   };
   const text = normCode(extractFallback());
   if (!text.trim()) return [];
-  const lang =
-    codeEl.getAttribute('data-language') ||
-    el.getAttribute('data-language') ||
-    (codeEl.className.match(/language-([a-z0-9_-]+)/i) || [])[1] ||
-    (el.className.match(/language-([a-z0-9_-]+)/i) || [])[1] ||
-    '';
+
+  const meta = extractNearbyMeta(el);
   const fence = chooseCodeFence(text);
-  const lines = ['', `${fence}${cleanInline(lang)}`];
+  const infoParts: string[] = [];
+  if (meta.lang) infoParts.push(meta.lang);
+  if (meta.title) infoParts.push(`title="${meta.title.replace(/"/g, '\\"')}"`);
+  const info = infoParts.join(' ');
+
+  const lines = ['', `${fence}${info}`];
   text.split('\n').forEach((l) => lines.push(l));
   lines.push(fence, '');
   ctx.appendix.codeBlocks++;
@@ -461,6 +661,7 @@ export const renderNode = (
     ...options,
   };
   const lines: string[] = [];
+  if (depth > 120) return lines;
   if (node.nodeType === Node.TEXT_NODE) {
     const t = cleanInline(node.textContent);
     if (t) lines.push(t.slice(0, config.maxTextNodeLength));
