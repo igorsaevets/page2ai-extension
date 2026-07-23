@@ -2,7 +2,7 @@
 <!-- 1-3 bullets describing the change -->
 
 ## Test plan
-<!-- How you tested this — commands run, sites tried, e2e checks -->
+<!-- How you tested this. Commands run, sites tried, e2e checks -->
 
 - [ ] `npm run compile` passes
 - [ ] `npm run build` passes

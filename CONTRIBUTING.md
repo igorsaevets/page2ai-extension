@@ -4,10 +4,10 @@ Thanks for wanting to contribute! Page2AI is an open-source Chrome extension tha
 
 ## Ways to help
 
-- **Report site issues** — if extraction fails or looks bad on a specific site, [open a Site Report](https://github.com/igorsaevets/page2ai-extension/issues/new?template=site-report.md). The profile system relies on real-world feedback.
-- **Fix a bug** — see [issues labeled `good first issue`](https://github.com/igorsaevets/page2ai-extension/issues?q=is%3Aopen+label%3A%22good+first+issue%22).
-- **Add a new site profile** — see [`lib/core/profiles.ts`](lib/core/profiles.ts) for the tuning surface.
-- **Improve extraction** — see [`lib/core/html-to-md.ts`](lib/core/html-to-md.ts) and [`lib/core/tab-handler.ts`](lib/core/tab-handler.ts).
+- **Report site issues.** If extraction fails or looks bad on a specific site, [open a Site Report](https://github.com/igorsaevets/page2ai-extension/issues/new?template=site-report.md). The profile system relies on real-world feedback.
+- **Fix a bug.** See [issues labeled `good first issue`](https://github.com/igorsaevets/page2ai-extension/issues?q=is%3Aopen+label%3A%22good+first+issue%22).
+- **Add a new site profile.** See [`lib/core/profiles.ts`](lib/core/profiles.ts) for the tuning surface.
+- **Improve extraction.** See [`lib/core/html-to-md.ts`](lib/core/html-to-md.ts) and [`lib/core/tab-handler.ts`](lib/core/tab-handler.ts).
 
 ## Development setup
 
@@ -46,7 +46,7 @@ node .e2e/e2e-popup.mjs   # 11 checks: full popup UX
 - TypeScript strict. No `any` without a comment justifying it.
 - No inline comments describing WHAT the code does. Only WHY (non-obvious constraints, workarounds, subtle invariants).
 - Prefer editing existing files over adding new ones.
-- Follow the extraction pipeline structure in `lib/core/` — don't add framework-level abstractions.
+- Follow the extraction pipeline structure in `lib/core/`. Don't add framework-level abstractions.
 
 ## License
 

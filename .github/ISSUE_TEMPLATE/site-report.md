@@ -1,6 +1,6 @@
 ---
 name: Site profile report
-about: Did Page2AI work well on a site? Poorly? Tell us — helps build the profile database.
+about: Did Page2AI work well on a site? Poorly? Tell us. Helps build the profile database.
 title: '[SITE] '
 labels: site-profile
 assignees: ''
