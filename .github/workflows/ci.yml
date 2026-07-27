@@ -74,7 +74,7 @@ jobs:
       - name: Smoke suite
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-        run: node .e2e/e2e-smoke.mjs
+        run: xvfb-run -a node .e2e/e2e-smoke.mjs
 
       # A/B: the same client-rendered fixture with the readiness gate off and on.
       # The control half must FAIL to render the late content. A suite where the
@@ -82,4 +82,4 @@ jobs:
       - name: SPA readiness suite
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-        run: node .e2e/e2e-spa.mjs
+        run: xvfb-run -a node .e2e/e2e-spa.mjs

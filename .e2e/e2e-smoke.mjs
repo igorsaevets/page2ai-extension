@@ -156,9 +156,19 @@ async function launch(headless) {
   return puppeteer.launch({
     executablePath: chromePath,
     headless,
-    pipe: true,
+    // Pipe transport is reliable on Windows and dies on GitHub's Linux runners
+    // with "Target.setDiscoverTargets: Target closed" the moment an extension is
+    // loaded. WebSocket transport works on both, so only Windows keeps the pipe.
+    pipe: process.platform === 'win32',
     enableExtensions: [EXT_PATH],
-    args: ['--no-first-run', '--disable-features=ChromeWhatsNewUI'],
+    args: [
+      '--no-first-run',
+      '--disable-features=ChromeWhatsNewUI',
+      // CI containers run as root without a usable /dev/shm; both flags are
+      // no-ops on a developer machine.
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ],
   });
 }
 
