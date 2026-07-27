@@ -37,3 +37,49 @@ jobs:
 
       - name: Build (Chrome MV3)
         run: npm run build
+
+  e2e:
+    name: End-to-end (real Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # puppeteer-core drives a real browser instead of bundling one, which is
+      # the point: the extractor runs inside an actual extension context, not a
+      # DOM emulation that would not reproduce injection or the service worker.
+      - name: Install puppeteer-core
+        run: npm i --no-save puppeteer-core
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v2
+        id: setup-chrome
+        with:
+          chrome-version: stable
+
+      - name: Build (e2e mode)
+        run: npx wxt build --mode e2e
+
+      - name: Smoke suite
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: node .e2e/e2e-smoke.mjs
+
+      # A/B: the same client-rendered fixture with the readiness gate off and on.
+      # The control half must FAIL to render the late content. A suite where the
+      # control passes is not testing the feature, it is testing the network.
+      - name: SPA readiness suite
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: node .e2e/e2e-spa.mjs

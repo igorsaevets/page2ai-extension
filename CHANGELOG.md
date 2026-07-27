@@ -4,6 +4,28 @@ All notable changes to Page2AI are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-27
+
+### Added
+
+- **Client-rendered (SPA) page support.** Pages that render their content in the browser after load were previously captured as an empty shell. The extractor now waits for content before it reads anything.
+
+  The existing `waitForDomToSettle` helper answers "has the DOM stopped changing", and on a client-rendered page that is the wrong question: an empty `<div id="root">` with a fetch in flight is perfectly quiescent, so a settle-based wait resolves immediately and the shell gets converted. The new gate in `lib/core/spa-readiness.ts` waits for *content* instead. It samples a two-part signal (character count and content-element count of the primary content root), requires it to hold still across consecutive samples, and refuses to release while an explicit loading indicator (`aria-busy`, `role="progressbar"`, skeleton / spinner / shimmer classes) is present. A page that is already rendered pays a single measurement and skips the wait entirely.
+
+- **Readiness reported in the output.** When the gate engages, the frontmatter carries `client_render_wait` (`ready` or `timeout`), `client_render_wait_ms`, `client_render_chars` and, on a timeout, `client_render_blocked_by` naming the selector that was still showing. A short page and a page we gave up on are no longer indistinguishable.
+
+- **Five configuration knobs**: `spaReadinessMode` (`off` / `auto` / `always`, default `auto`), `spaMinContentChars` (200), `spaPollIntervalMs` (150), `spaMaxWaitMs` (6000), `spaStableSamples` (2). The `dashboard` profile ships `always` with a 10 s budget, since a dashboard is a single-page app by definition.
+
+- **`.e2e/e2e-spa.mjs`** — an A/B end-to-end suite, 16 checks. The same client-rendered fixture is extracted with the gate off and on in the same browser, and the control half is *required to fail* to render the late content. A suite whose control passes is not testing the feature.
+
+- **End-to-end tests now run in CI** on every push and pull request, against a real Chrome, alongside the type-check and build.
+
+### Changed
+
+- Character count is no longer part of the release condition, only of the decision to start waiting and of how long stability must hold. The first implementation gated release on the character floor and the new e2e suite caught it: a genuinely short page that had finished rendering could never satisfy the floor, so the gate burned its whole budget and reported a timeout on a page that had been ready for seconds.
+
+[1.3.0]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.3.0
+
 ## [1.2.0] - 2026-07-23
 
 ### Added

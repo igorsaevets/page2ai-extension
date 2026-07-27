@@ -19,11 +19,17 @@ import puppeteer from 'puppeteer-core';
 // WXT appends the non-production mode name to the output dir.
 const EXT_PATH = path.resolve('.output/chrome-mv3-e2e');
 
+// CHROME_PATH first so CI can point at whatever the runner installed; the
+// Windows paths stay for local runs on the development machine.
 const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium-browser',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe`,
-];
+].filter(Boolean);
 
 const TEST_HTML = `<!doctype html>
 <html lang="en">

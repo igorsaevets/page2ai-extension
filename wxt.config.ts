@@ -2,7 +2,8 @@ import { defineConfig } from 'wxt';
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
-  manifest: ({ mode }) => ({
+  manifestVersion: 3,
+  manifest: ({ mode, browser }) => ({
     name: 'Page2AI — Webpage to Markdown',
     description: 'Convert any webpage to clean, AI-ready Markdown. 100% local, open source.',
     author: { email: 'igorsaevets@gmail.com' },
@@ -21,6 +22,19 @@ export default defineConfig({
     action: {
       default_title: 'Page2AI — Extract as Markdown',
     },
+    // Firefox-only: stable extension ID, min supported Firefox, zero data collection
+    // declaration. Required for AMO submission (Nov 3 2025+ policy).
+    ...(browser === 'firefox' && {
+      browser_specific_settings: {
+        gecko: {
+          id: 'page2ai@igorsaevets.com',
+          strict_min_version: '128.0',
+          data_collection_permissions: {
+            required: ['none'],
+          },
+        },
+      },
+    }),
     // The e2e build grants localhost host access so the smoke test can call
     // scripting.executeScript without the activeTab user gesture. Never ships.
     ...(mode === 'e2e' ? { host_permissions: ['http://127.0.0.1/*'] } : {}),

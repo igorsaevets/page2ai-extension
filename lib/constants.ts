@@ -10,6 +10,14 @@ export const DEFAULTS: ExtractorConfig = {
   fileExtension: 'md',
   interactionMode: 'safe-tabs-and-details',
   lazyLoadMode: 'safe',
+  spaReadinessMode: 'auto',
+  spaMinContentChars: 200,
+  spaPollIntervalMs: 150,
+  // 6 s is the point where a user assumes the extension is broken. Chosen as a
+  // UX bound, not a network one: a page that has not rendered by then is better
+  // reported honestly than waited on silently.
+  spaMaxWaitMs: 6000,
+  spaStableSamples: 2,
   lazyScrollSteps: 8,
   lazySafeViewports: 3,
   lazyScrollWaitMs: 200,

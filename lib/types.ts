@@ -22,12 +22,43 @@ export type OfficialMarkdownMode =
 export type StructuredDataPosition = 'never-emit' | 'before-content' | 'after-content';
 export type OutputMode = 'clean' | 'debug';
 
+// 'auto' engages the wait only on pages that look client-rendered, so a
+// server-rendered page pays a single content measurement. 'always' engages it
+// unconditionally, which is useful for a known-SPA profile.
+export type SpaReadinessMode = 'off' | 'auto' | 'always';
+
+export interface SpaReadinessReport {
+  engaged: boolean;
+  // 'static'   — auto mode decided the page was already rendered
+  // 'ready'    — content cleared the floor and held still
+  // 'timeout'  — budget spent; extraction continues with whatever is there
+  // 'disabled' — mode was 'off'
+  outcome: 'static' | 'ready' | 'timeout' | 'disabled';
+  waitedMs: number;
+  initialChars: number;
+  finalChars: number;
+  lastLoadingIndicator: string | null;
+}
+
 // Full extractor configuration. DEFAULTS in lib/constants.ts provides every field;
 // profiles and user overrides are Partial<ExtractorConfig>.
 export interface ExtractorConfig {
   fileExtension: string;
   interactionMode: InteractionMode;
   lazyLoadMode: LazyLoadMode;
+  // --- SPA readiness gate (v0.3) ---
+  // waitForDomToSettle answers "did the DOM stop changing"; on a client-rendered
+  // page an empty root with a fetch in flight answers yes. These knobs drive the
+  // separate content-based wait in lib/core/spa-readiness.ts.
+  spaReadinessMode: SpaReadinessMode;
+  // Character floor for the primary content root before the page counts as
+  // rendered. Below this in 'auto' mode the gate engages.
+  spaMinContentChars: number;
+  spaPollIntervalMs: number;
+  spaMaxWaitMs: number;
+  // Consecutive identical samples required before declaring readiness. 1 fires on
+  // the first paint of a two-pass render; 2 is the cheapest value that does not.
+  spaStableSamples: number;
   lazyScrollSteps: number;
   lazySafeViewports: number;
   lazyScrollWaitMs: number;
@@ -316,6 +347,7 @@ export interface ExtractResult {
   officialMarkdownUrl?: string;
   officialMarkdownRatio?: number;
   quality?: QualityReport;
+  spaReadiness?: SpaReadinessReport;
   tabsCaptured: number;
   dropdownsCaptured: number;
   error?: { name: string; message: string };

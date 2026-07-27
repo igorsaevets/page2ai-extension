@@ -28,6 +28,7 @@ import {
 } from './md-postprocess';
 import { convertMdxToMarkdown } from './mdx-processor';
 import { fetchOfficialMd } from './llms-txt';
+import { waitForSpaContentReady } from './spa-readiness';
 import { extractDropdownPanels, extractTabPanels } from './tab-handler';
 import {
   buildStructuredDataSection,
@@ -453,6 +454,12 @@ export const runExtractor = async (
   try {
     progress('start', `profile="${config.activeProfile}"`);
 
+    // Before anything reads the DOM. The baseline body text below is what the
+    // quality gate later compares the render against, so measuring it while a
+    // client-rendered page is still an empty shell poisons every downstream
+    // ratio, not just the output.
+    const spaReadiness = await waitForSpaContentReady(ctx);
+
     expandDetailsElementsSafely(ctx);
     await sleep(80);
     state.baselineBodyText = cleanBlock(document.body.innerText || document.body.textContent || '');
@@ -489,6 +496,7 @@ export const runExtractor = async (
           profile: config.activeProfile,
           officialMarkdownUrl: officialMd.url,
           officialMarkdownRatio: ratio,
+          spaReadiness,
           tabsCaptured: 0,
           dropdownsCaptured: 0,
         };
@@ -504,7 +512,22 @@ export const runExtractor = async (
 
     const sdLines = buildStructuredDataSection(config);
     const isLines = extractInternalStateBlock(config);
-    const fm = buildFrontmatter(ctx);
+    // Only surfaced when the gate actually ran. On a server-rendered page these
+    // keys would be noise in every single file; on a client-rendered one they are
+    // the difference between "this page is short" and "we gave up early".
+    const fm = buildFrontmatter(
+      ctx,
+      spaReadiness.engaged
+        ? {
+            client_render_wait: spaReadiness.outcome,
+            client_render_wait_ms: spaReadiness.waitedMs,
+            client_render_chars: `${spaReadiness.initialChars} -> ${spaReadiness.finalChars}`,
+            ...(spaReadiness.lastLoadingIndicator
+              ? { client_render_blocked_by: spaReadiness.lastLoadingIndicator }
+              : {}),
+          }
+        : {},
+    );
     const bodyLines = renderNode(ctx, document.body, 0);
     const mrt = bodyLines.join('\n');
 
@@ -570,6 +593,7 @@ export const runExtractor = async (
       filename: buildFilename(config),
       profile: config.activeProfile,
       quality,
+      spaReadiness,
       tabsCaptured: state.tabPanelsByButtonId.size,
       dropdownsCaptured: state.dropdownPanelsByButtonId.size,
       ...(officialSupp ? { officialMarkdownUrl: officialSupp.url, officialMarkdownRatio: officialSupp.ratio } : {}),

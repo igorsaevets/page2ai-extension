@@ -15,6 +15,11 @@ export const PROFILES: Record<ProfileName, ProfileSettings> = {
   'dashboard': {
     interactionMode: 'none',
     lazyLoadMode: 'none',
+    // A dashboard is a single-page app by definition: it is the one profile where
+    // the first paint is reliably an empty shell, so the gate runs unconditionally
+    // and gets a longer budget than the global default.
+    spaReadinessMode: 'always',
+    spaMaxWaitMs: 10000,
     tabPanelStrategy: 'safe',
     visualMarkersMode: 'none',
     officialMarkdownMode: 'never',

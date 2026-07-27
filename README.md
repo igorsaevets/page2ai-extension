@@ -78,6 +78,7 @@ Progress log runs live in the popup. If you close the popup mid-extraction, the 
 | Free & open source | ✅ MIT | ❌ $9/mo Pro | ✅ | ✅ | ✅ |
 | Hidden-tab code capture (Python + TS + cURL) | ✅ | ⚠️ Reddit/X only | ❌ | ❌ | N/A |
 | Auto site-profile detection | ✅ 5 profiles | ⚠️ per-site rules | ❌ | ❌ | N/A |
+| Client-rendered (SPA) pages | ✅ readiness gate | ❌ | ❌ | ❌ | ✅ full-page snapshot |
 | MDX / JSX components (Mintlify, Docusaurus, Starlight, Shiki, Nextra) | ✅ | ❌ | ❌ | ❌ | N/A |
 | Rich frontmatter (OG, Twitter, JSON-LD, article:*) | ✅ | ❌ | ⚠️ Obsidian-only | ❌ | N/A |
 | Table colspan handling | ✅ | ❌ | ❌ | ❌ | N/A |
@@ -96,6 +97,8 @@ Progress log runs live in the popup. If you close the popup mid-extraction, the 
 **MDX / JSX post-processing.** Turns Mintlify components (`<Note>`, `<CodeGroup>`, `<Tabs>`, `<AccordionGroup>`), Docusaurus admonitions, Starlight cards, and Shiki-highlighted blocks into clean Markdown.
 
 **`llms.txt` discovery.** If the site publishes an official `.md` alongside the page, Page2AI uses that directly. Short path, higher fidelity.
+
+**Client-rendered page support.** Pages that build their content in the browser used to come out as an empty shell, because "the DOM stopped changing" and "the page is ready" are different questions: an empty root with a fetch in flight is perfectly quiescent. Page2AI waits for *content* instead. It samples the primary content root, requires the signal to hold still, and refuses to proceed while an `aria-busy`, `role="progressbar"` or skeleton element is still showing. An already-rendered page pays one measurement and no wait. When the gate does engage, the frontmatter says so.
 
 **Quality gate.** Counts `<pre>` blocks vs a plain-text baseline to catch under-extraction. Falls back to permissive rendering automatically.
 
@@ -183,7 +186,7 @@ npm run icons        # Regenerate PNG icons from SVG sources
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Latest: **v1.2.0** (July 2026). Table colspan support, recursive blockquotes, extraction performance work.
+See [CHANGELOG.md](CHANGELOG.md). Latest: **v1.3.0** (July 2026). Client-rendered (SPA) page support with an A/B end-to-end suite, plus end-to-end tests in CI.
 
 ## Credits
 
