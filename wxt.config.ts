@@ -6,7 +6,10 @@ export default defineConfig({
   manifest: ({ mode, browser }) => ({
     name: 'Page2AI — Webpage to Markdown',
     description: 'Convert any webpage to clean, AI-ready Markdown. 100% local, open source.',
-    author: { email: 'igorsaevets@gmail.com' },
+    // Chrome accepts the MV3 object form; Mozilla's validator rejects it outright
+    // ("MANIFEST_FIELD_INVALID: /author must be string"), so Firefox gets a string.
+    // Caught by `web-ext lint` before the AMO upload, not by AMO after it.
+    author: browser === 'firefox' ? 'Igor Saevets' : { email: 'igorsaevets@gmail.com' },
     homepage_url: 'https://github.com/igorsaevets/page2ai-extension',
     permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage'],
     commands: {
@@ -28,10 +31,19 @@ export default defineConfig({
       browser_specific_settings: {
         gecko: {
           id: 'page2ai@igorsaevets.com',
-          strict_min_version: '128.0',
+          // 140.0, not 128.0: `data_collection_permissions` landed in Firefox 140
+          // (Android 142). Declaring 128 makes the manifest claim support on versions
+          // that ignore the key, which `web-ext lint` flags as
+          // KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION.
+          strict_min_version: '140.0',
           data_collection_permissions: {
             required: ['none'],
           },
+        },
+        // Android got the same key two releases later. Declaring it separately keeps
+        // desktop at 140 instead of pushing every desktop user to 142 for no reason.
+        gecko_android: {
+          strict_min_version: '142.0',
         },
       },
     }),
