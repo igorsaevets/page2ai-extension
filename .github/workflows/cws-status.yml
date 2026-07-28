@@ -1,0 +1,54 @@
+name: Chrome Web Store status
+
+# Read-only probe of the store item. Exists because the publish job used to hide
+# upload failures behind continue-on-error: on 2026-07-23 the v1.2.0 job was green
+# while the API had returned ITEM_NOT_UPDATABLE, so nobody noticed the store copy
+# had stopped advancing. This reports the item's real status on demand.
+#
+# Prints the status fields only. Never echoes a credential.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    name: Query item status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Exchange refresh token and read item status
+        env:
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+
+          ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${CLIENT_ID}" \
+            -d "client_secret=${CLIENT_SECRET}" \
+            -d "refresh_token=${REFRESH_TOKEN}" \
+            -d "grant_type=refresh_token" | jq -r '.access_token // empty')
+
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "::error::Token exchange returned no access_token. The refresh token is probably revoked or expired."
+            exit 1
+          fi
+          echo "Token exchange: OK"
+
+          echo "--- projection=DRAFT ---"
+          curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+               -H "x-goog-api-version: 2" \
+               "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=DRAFT" \
+            | jq 'del(.id)'
+
+          echo "--- projection=PUBLISHED ---"
+          curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+               -H "x-goog-api-version: 2" \
+               "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=PUBLISHED" \
+            | jq 'del(.id)'

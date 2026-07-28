@@ -76,7 +76,13 @@ jobs:
       # Refs: https://github.com/mnao305/chrome-extension-upload
       #       https://github.com/fregante/chrome-webstore-upload/issues/114
       - name: Upload to Chrome Web Store
+        id: cws
         if: ${{ !inputs.dry_run }}
+        # continue-on-error is here so a store rejection does not cost us the GitHub
+        # Release. On its own it also HIDES the rejection: GitHub records
+        # conclusion=success for a step that failed, which is why v1.2.0 looked
+        # published for four days while the API had answered ITEM_NOT_UPDATABLE.
+        # The gate below turns the real outcome back into a red run.
         continue-on-error: true
         # SHA-pinned to v6.0.0 (2026-03-31). Update pin when bumping tag.
         uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4
@@ -100,3 +106,9 @@ jobs:
 
             See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
           fail_on_unmatched_files: true
+
+      - name: Fail the run if the store rejected the upload
+        if: ${{ !inputs.dry_run && steps.cws.outcome == 'failure' }}
+        run: |
+          echo "::error::The Chrome Web Store upload failed. The GitHub Release was still created, but the store copy did NOT advance. Read the 'Upload to Chrome Web Store' step log for the error_code, then run the 'Chrome Web Store status' workflow to see the item state."
+          exit 1
