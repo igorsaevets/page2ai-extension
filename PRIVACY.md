@@ -35,6 +35,22 @@ Page2AI converts this content into Markdown text on your machine and:
 
 No content is transmitted to any server operated by Page2AI, the publisher, or any third party.
 
+## The one network request Page2AI makes
+
+Many documentation sites publish a machine-readable Markdown copy of each page. When you invoke the
+extension it looks for one on **the site you are already reading, and only that site**: it requests
+`/llms.txt`, `/docs/llms.txt` and `/llms-full.txt` on the current origin, and if that index names a
+Markdown file for the page you are on, it requests that file too. Using the site's own Markdown
+gives a better result than converting rendered HTML.
+
+These are same-origin requests issued from the page itself, so they carry your normal cookies for
+that site, exactly as following a link on it would. The extension declares no `host_permissions`,
+so the browser will not let it reach any other origin. Nothing about you or the page is sent to the
+author or to any third party at any point.
+
+To switch it off, set **Official Markdown** to `never` in the popup. Source:
+[`lib/core/llms-txt.ts`](lib/core/llms-txt.ts).
+
 ## What data Page2AI stores
 
 Page2AI uses the browser's `chrome.storage.local` API to remember your extension preferences between sessions:
