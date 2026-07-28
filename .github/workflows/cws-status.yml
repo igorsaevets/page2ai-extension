@@ -1,28 +1,89 @@
 name: Chrome Web Store status
 
-# Read-only probe of the store item. Exists because the publish job used to hide
-# upload failures behind continue-on-error: on 2026-07-23 the v1.2.0 job was green
-# while the API had returned ITEM_NOT_UPDATABLE, so nobody noticed the store copy
-# had stopped advancing. This reports the item's real status on demand.
+# Answers one question: is this extension actually live in the Chrome Web Store?
 #
-# Prints the status fields only. Never echoes a credential.
+# It exists because that question was answered wrong twice in one week, both times
+# by trusting a system that had no reason to disagree with us:
+#
+#   2026-07-23  the publish job was green while the API had returned
+#               ITEM_NOT_UPDATABLE. The step carried continue-on-error, which makes
+#               GitHub record conclusion: success for a step that failed.
+#   2026-07-27  POST /items/{id}/publish returned {"status":["OK"]} and nothing was
+#               published, because the item was still in review. An accepted request
+#               is not a completed action.
+#
+# So the FIRST job here uses no credentials at all and asks Chrome's own update
+# service, which serves the CRX to real browsers. If that says the item is unknown,
+# the item is not live, whatever any dashboard or API says.
 
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Also POST /publish. Succeeds only if the item already passed review and is waiting; on an item still under review the API just reports the state.'
+        description: 'Also POST /publish. Has no effect while the item is in review; only moves an item that has already passed review and is waiting.'
         type: boolean
         default: false
+  schedule:
+    # Mondays 09:00 UTC. A heartbeat, not a monitor: nothing about the store
+    # notifies us, and a store review can sit for weeks.
+    - cron: '0 9 * * 1'
 
 permissions:
   contents: read
 
+env:
+  # Public. This is the store ID, not a credential.
+  ITEM_ID: dlpaaijcnbbmlfeohlphjpnbbcnomnno
+
 jobs:
-  status:
-    name: Query item status
+  live:
+    name: Is it live (anonymous, no credentials)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    steps:
+      - name: Ask Chrome's update service
+        run: |
+          set -euo pipefail
+
+          # This is the endpoint a real Chrome asks for extension updates. It answers
+          # for published items only, and it answers to anybody.
+          XML=$(curl -sS --max-time 30 \
+            "https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3D${ITEM_ID}%26uc")
+
+          echo "$XML"
+
+          if grep -q 'status="ok"' <<<"$XML"; then
+            VERSION=$(sed -n 's/.*version="\([^"]*\)".*/\1/p' <<<"$XML" | head -1)
+            VERDICT="LIVE in the Chrome Web Store, version ${VERSION:-unknown}"
+          elif grep -q 'error-unknownApplication' <<<"$XML"; then
+            VERDICT="NOT LIVE. Google's update service has no published CRX for this ID."
+          else
+            VERDICT="UNDETERMINED. The update service answered something unexpected (see the XML above)."
+          fi
+
+          echo "$VERDICT"
+          {
+            echo "### Chrome Web Store"
+            echo ""
+            echo "**$VERDICT**"
+            echo ""
+            echo "Item: \`$ITEM_ID\` · checked $(date -u '+%Y-%m-%d %H:%M UTC') · no credentials used."
+            echo ""
+            echo "Reproduce with one command, no account needed:"
+            echo '```'
+            echo "curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3D${ITEM_ID}%26uc'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Deliberately does not fail. A store review legitimately takes days to
+          # weeks; a red run every Monday would train us to ignore this workflow.
+          # Read the summary line.
+
+  status:
+    name: Query item status (needs store credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: live
 
     steps:
       - name: Exchange refresh token and read item status
@@ -48,21 +109,29 @@ jobs:
           echo "Token exchange: OK"
 
           echo "--- projection=DRAFT ---"
+          # uploadState and crxVersion describe the DRAFT. crxVersion lagging behind
+          # the repo means later uploads never landed. itemError, when present, is the
+          # store's own explanation.
           curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
                -H "x-goog-api-version: 2" \
                "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=DRAFT" \
-            | jq 'del(.id)'
+            | jq 'del(.id, .publicKey)'
 
           echo "--- projection=PUBLISHED ---"
-          # A 400 "Please append ?projection=DRAFT" here is the API's way of saying
-          # the item has no published version at all.
+          # Expect HTTP 400 "Please append ?projection=DRAFT". Treat that as noise:
+          # this API rejects projection=PUBLISHED for every item, so it says nothing
+          # about whether THIS item is published. On 2026-07-27 it was read as proof
+          # that no published version existed. It is not evidence either way -- the
+          # anonymous job above is. Kept only so the raw response is on the record.
           curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
                -H "x-goog-api-version: 2" \
                "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=PUBLISHED" \
-            | jq 'del(.id)'
+            | jq 'del(.id, .publicKey)'
 
           if [ "${PUBLISH}" = "true" ]; then
             echo "--- POST /publish (target: default) ---"
+            # {"status":["OK"]} means the request was accepted, NOT that anything was
+            # published. Confirm with the anonymous job, never with this response.
             curl -s -X POST \
                  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
                  -H "x-goog-api-version: 2" \
