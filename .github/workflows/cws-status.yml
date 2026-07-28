@@ -9,6 +9,11 @@ name: Chrome Web Store status
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Also POST /publish. Succeeds only if the item already passed review and is waiting; on an item still under review the API just reports the state.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
           EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           set -euo pipefail
 
@@ -48,7 +54,19 @@ jobs:
             | jq 'del(.id)'
 
           echo "--- projection=PUBLISHED ---"
+          # A 400 "Please append ?projection=DRAFT" here is the API's way of saying
+          # the item has no published version at all.
           curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
                -H "x-goog-api-version: 2" \
                "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=PUBLISHED" \
             | jq 'del(.id)'
+
+          if [ "${PUBLISH}" = "true" ]; then
+            echo "--- POST /publish (target: default) ---"
+            curl -s -X POST \
+                 -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                 -H "x-goog-api-version: 2" \
+                 -H "Content-Length: 0" \
+                 "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
+              | jq '.'
+          fi
