@@ -8,19 +8,21 @@
 
 Chrome extension for Claude, ChatGPT, Cursor, Obsidian, and RAG pipelines. 100% local. Open source. MIT.
 
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dlpaaijcnbbmlfeohlphjpnbbcnomnno?logo=googlechrome&logoColor=white&label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)
-[![Users](https://img.shields.io/chrome-web-store/users/dlpaaijcnbbmlfeohlphjpnbbcnomnno?logo=googlechrome&logoColor=white&label=Users)](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-in%20review-b45309?logo=googlechrome&logoColor=white)](#install)
 [![License MIT](https://img.shields.io/badge/License-MIT-4f46e5.svg)](LICENSE)
 [![Build](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml/badge.svg)](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml)
 [![GitHub stars](https://img.shields.io/github/stars/igorsaevets/page2ai-extension?style=social)](https://github.com/igorsaevets/page2ai-extension/stargazers)
 
 <br>
 
-<a href="https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno">
-  <img src="https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/HRs9MPufa1J1h5glNhut.png" height="60" alt="Install from Chrome Web Store">
-</a>
+**Not on the Chrome Web Store yet.** The listing has been in review since 2026-07-21.
+[Install from a release](#install) in the meantime, or check the live status yourself:
 
-<br><br>
+```
+curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3Ddlpaaijcnbbmlfeohlphjpnbbcnomnno%26uc'
+```
+
+<br>
 
 <sub>Demo GIF recording in progress. Check back soon.</sub>
 
@@ -45,13 +47,33 @@ Page2AI grabs the actual content. It captures hidden tabs. It outputs Markdown w
 
 ## Install
 
-### Chrome Web Store
-
-[**Install Page2AI**](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno). One click, then hit `Alt+Shift+M` on any page.
-
 Works in Chrome, Edge, Brave, Arc, Vivaldi, and other Chromium browsers.
 
-### Load unpacked (developers)
+### Chrome Web Store: submitted, still in review
+
+The listing was submitted on **2026-07-21** and Google has not finished reviewing it. Until it is
+approved there is nothing to install from the store, and this README will not pretend otherwise.
+Google's own guidance is that a review can run to a few weeks and that developers should contact
+support only after three.
+
+Check the current state yourself, no account needed. Google's update service answers for published
+items only:
+
+```bash
+./scripts/is-published.sh
+# or, without cloning:
+curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3Ddlpaaijcnbbmlfeohlphjpnbbcnomnno%26uc'
+```
+
+`status="ok"` plus a version means it is live. `error-unknownApplication` means it is not.
+
+### Install from a release
+
+Every tagged version ships a signed-by-CI zip on the
+[releases page](https://github.com/igorsaevets/page2ai-extension/releases). Download it, unzip it,
+then `chrome://extensions` -> Developer mode -> Load unpacked -> select the unzipped folder.
+
+### Build from source
 
 ```powershell
 git clone https://github.com/igorsaevets/page2ai-extension.git
