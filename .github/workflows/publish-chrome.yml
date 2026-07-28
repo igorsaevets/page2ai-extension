@@ -18,6 +18,14 @@ concurrency:
 permissions:
   contents: write
 
+# GitHub's implicit shell for `run:` is `bash -e {0}` -- `-e` is on, `pipefail` is
+# NOT. So `X=$(ls something | head -n 1)` succeeds with X empty when `ls` fails,
+# because `head` is the last command in the pipe. Naming the shell explicitly gets
+# `bash --noprofile --norc -eo pipefail {0}`, which fails the step instead.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   publish:
     name: Zip → CWS → GitHub Release
