@@ -8,15 +8,16 @@
 
 Chrome extension for Claude, ChatGPT, Cursor, Obsidian, and RAG pipelines. 100% local. Open source. MIT.
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-in%20review-b45309?logo=googlechrome&logoColor=white)](#install)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dlpaaijcnbbmlfeohlphjpnbbcnomnno?logo=googlechrome&logoColor=white&label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)
 [![License MIT](https://img.shields.io/badge/License-MIT-4f46e5.svg)](LICENSE)
 [![Build](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml/badge.svg)](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml)
 [![GitHub stars](https://img.shields.io/github/stars/igorsaevets/page2ai-extension?style=social)](https://github.com/igorsaevets/page2ai-extension/stargazers)
 
 <br>
 
-**Not on the Chrome Web Store yet.** The listing has been in review since 2026-07-21.
-[Install from a release](#install) in the meantime, or check the live status yourself:
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)** — live since **2026-07-30** (v1.0.2, approved after a 9-day review).
+Prefer to verify before trusting a README? The same anonymous check this file carried while the
+listing was in review still works:
 
 ```
 curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3Ddlpaaijcnbbmlfeohlphjpnbbcnomnno%26uc'
@@ -49,15 +50,14 @@ Page2AI grabs the actual content. It captures hidden tabs. It outputs Markdown w
 
 Works in Chrome, Edge, Brave, Arc, Vivaldi, and other Chromium browsers.
 
-### Chrome Web Store: submitted, still in review
+### Chrome Web Store (recommended)
 
-The listing was submitted on **2026-07-21** and Google has not finished reviewing it. Until it is
-approved there is nothing to install from the store, and this README will not pretend otherwise.
-Google's own guidance is that a review can run to a few weeks and that developers should contact
-support only after three.
+**[Page2AI on the Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)** —
+approved and live since **2026-07-30** (submitted 2026-07-21, a 9-day review). One click, and the
+browser keeps it updated.
 
-Check the current state yourself, no account needed. Google's update service answers for published
-items only:
+While the listing was in review, this README refused to advertise it and published an anonymous
+check instead. The check stays, because a README should stay verifiable either way:
 
 ```bash
 ./scripts/is-published.sh
