@@ -1,0 +1,33 @@
+name: Extraction problem or bug
+description: A page extracts wrong, incomplete, or not at all
+labels: [bug]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Page URL
+      description: The page where it happened. If the page is private, say so and attach a saved HTML file instead.
+      placeholder: https://example.com/article
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Extension version and browser
+      placeholder: Page2AI 1.0.2, Chrome 139 / Firefox 141
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What you got
+      description: Paste the Markdown you received, or the error shown in the popup.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Which part of the page is missing or wrong.
+    validations:
+      required: true
