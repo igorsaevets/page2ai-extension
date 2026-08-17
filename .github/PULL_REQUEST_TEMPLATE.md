@@ -11,3 +11,10 @@
 
 ## Related issues
 <!-- Fixes #123, refs #456 -->
+
+## AI disclosure
+
+- [ ] I did **not** use AI assistance for this contribution
+- [ ] I **did** use AI assistance (describe below)
+
+<!-- If you used AI, briefly describe how: -->
