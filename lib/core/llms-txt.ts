@@ -31,6 +31,22 @@ export const isPageSpecificMd = (u: string): boolean => {
   }
 };
 
+// Cross-origin candidates are gated in EVERY mode: PRIVACY.md promises that
+// requests go to the current site (plus the trusted docs list), and a llms.txt
+// entry pointing at another origin must not widen that promise, whatever mode
+// a future UI exposes.
+const isHostAllowed = (
+  u: string,
+  config: Pick<ResolvedConfig, 'trustedOfficialMarkdownHosts'>,
+): boolean => {
+  try {
+    const h = new URL(u, location.href).hostname;
+    return h === location.hostname || isTrustedHost(config, h);
+  } catch {
+    return false;
+  }
+};
+
 // If a .md URL was discovered via llms.txt, trust same-origin even without whitelist.
 export const shouldUseOfficialMd = (
   u: string,
@@ -38,19 +54,10 @@ export const shouldUseOfficialMd = (
 ): boolean => {
   const m = config.officialMarkdownMode;
   if (m === 'never') return false;
-  if (m === 'always') return !isLlmsFile(u);
+  if (m === 'always') return !isLlmsFile(u) && isHostAllowed(u, config);
   if (!isPageSpecificMd(u)) return false;
-  if (m === 'page-specific') return true;
-  if (m === 'trusted-docs-only') {
-    if (isTrustedHost(config)) return true;
-    try {
-      const urlHost = new URL(u, location.href).hostname;
-      if (urlHost === location.hostname) return true;
-    } catch {
-      // ignore
-    }
-    return false;
-  }
+  if (m === 'page-specific') return isHostAllowed(u, config);
+  if (m === 'trusted-docs-only') return isHostAllowed(u, config);
   return false;
 };
 
@@ -113,7 +120,11 @@ export const fetchOfficialMd = async (
   const unique = [...new Set(cands)].filter((u) => shouldUseOfficialMd(u, config));
   for (const u of unique) {
     try {
-      const r = await fetch(u, { credentials: 'include', cache: 'no-store' });
+      // Cookies only travel to the current origin; a whitelisted cross-origin
+      // docs host gets an anonymous request.
+      let sameOrigin = false;
+      try { sameOrigin = new URL(u, location.href).hostname === location.hostname; } catch { /* ignore */ }
+      const r = await fetch(u, { credentials: sameOrigin ? 'include' : 'omit', cache: 'no-store' });
       if (!r.ok) continue;
       const ct = r.headers.get('content-type') || '';
       const t = await r.text();

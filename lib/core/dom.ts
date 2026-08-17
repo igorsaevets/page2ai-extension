@@ -234,12 +234,39 @@ export const queryAllDeep = (
 
 // --- DOM helpers (Section 20) ---
 
-export const getPrimaryContentRoot = (): Element =>
-  document.querySelector('main article') ||
-  document.querySelector('article') ||
-  document.querySelector('main') ||
-  document.querySelector('[role="main"]') ||
-  document.body;
+// An <article> replaces the container only when it dominates the container's
+// text (>=0.5) or dwarfs every sibling <article> 3x. Ported from
+// @page2ai/core 0.1.4 pickContentRoot: querySelector('article') returns the
+// FIRST match in document order, and design systems spend the tag on cards and
+// teasers, so on card-grid pages (Astro/Starlight indexes, blog homes) the old
+// selector chain returned a ~155-char card. Here the root scopes SPA-readiness
+// measurement, details expansion and tab discovery, so a card root made the
+// SPA gate misread a fully-rendered static page as empty and wait out its full
+// budget. Thresholds and their measurements: page2ai-core basic-renderer.ts.
+const ARTICLE_DOMINANCE = 0.5;
+const ARTICLE_DWARFS_SIBLINGS = 3;
+
+const roughContentLength = (el: Element): number =>
+  ((((el as HTMLElement).innerText ?? el.textContent) || '').replace(/\s+/g, ' ').trim()).length;
+
+export const getPrimaryContentRoot = (): Element => {
+  const container =
+    document.querySelector('main') ||
+    document.querySelector('[role="main"]') ||
+    document.body;
+  const articles = Array.from(container.querySelectorAll('article'))
+    .map((a) => ({ el: a, n: roughContentLength(a) }))
+    .sort((x, y) => y.n - x.n);
+  if (articles.length) {
+    const best = articles[0];
+    const containerLen = roughContentLength(container);
+    const runnerUp = articles[1]?.n ?? 0;
+    const dominatesContainer = containerLen > 0 && best.n / containerLen >= ARTICLE_DOMINANCE;
+    const dwarfsSiblings = runnerUp > 0 && best.n / runnerUp >= ARTICLE_DWARFS_SIBLINGS;
+    if (dominatesContainer || dwarfsSiblings) return best.el;
+  }
+  return container;
+};
 
 export const isInsideDangerousNavigationArea = (el: Node | null | undefined): boolean => {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return true;
