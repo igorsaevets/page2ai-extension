@@ -189,7 +189,7 @@ export const classifyLink = (
   if (url.startsWith('tel:')) return { type: 'tel', label: as || url.replace(/^tel:/, '') };
   const sm = url.match(SOCIAL_DOMAIN_RE);
   if (sm) {
-    const d = sm[1].replace(/^www\./, '').replace(/^m\./, '');
+    const d = sm[1]!.replace(/^www\./, '').replace(/^m\./, '');
     return { type: 'social', label: d };
   }
   if (hasImg && /\.(jpe?g|png|webp|gif|svg|bmp|ico|avif)(?:\?|#|$)/i.test(url)) {

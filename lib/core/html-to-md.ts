@@ -340,7 +340,7 @@ export const renderTable = (table: HTMLTableElement, depth: number): string[] =>
     return cp;
   });
   lines.push('');
-  const h = nr[0];
+  const h = nr[0]!;
   lines.push(`${pfx}| ${h.join(' | ')} |`);
   lines.push(`${pfx}| ${h.map(() => '---').join(' | ')} |`);
   nr.slice(1).forEach((r) => lines.push(`${pfx}| ${r.join(' | ')} |`));
@@ -449,7 +449,7 @@ const extractNearbyMeta = (pre: Element): CodeBlockMeta => {
       if (!e || typeof e.className !== 'string') continue;
       const m = e.className.match(/language-([a-z0-9_+#.-]+)/i);
       if (m) {
-        lang = normalizeLang(m[1]);
+        lang = normalizeLang(m[1]!);
         if (lang) break;
       }
     }
@@ -537,7 +537,7 @@ const extractNearbyMeta = (pre: Element): CodeBlockMeta => {
   if (!lang && title) {
     const m = title.match(/\.([a-z0-9]+)(?:\s|:|$)/i);
     if (m) {
-      const inferred = normalizeLang(m[1], true);
+      const inferred = normalizeLang(m[1]!, true);
       if (inferred) lang = inferred;
     }
   }
@@ -574,12 +574,12 @@ export const renderCodeBlock = (ctx: ExtractContext, el: Element): string[] => {
         const m = l.match(/^[ \t]+/);
         return s + (m ? m[0].length : 0);
       }, 0);
-    return cs.sort((a, b) => si(b) - si(a))[0];
+    return cs.sort((a, b) => si(b) - si(a))[0]!;
   };
   const normCode = (t: string): string => {
     const ls = String(t || '').replace(/\u00a0/g, ' ').replace(/\r/g, '').split('\n');
-    while (ls.length && ls[0].trim() === '') ls.shift();
-    while (ls.length && ls[ls.length - 1].trim() === '') ls.pop();
+    while (ls.length && ls[0]!.trim() === '') ls.shift();
+    while (ls.length && ls[ls.length - 1]!.trim() === '') ls.pop();
     return ls.join('\n');
   };
   const text = normCode(extractFallback());
@@ -958,7 +958,7 @@ export const renderNode = (
     const lis = [...el.children].filter((c) => c.tagName === 'LI');
     for (let i = 0; i < lis.length; i++) {
       lines.push(
-        ...renderNode(ctx, lis[i], depth, {
+        ...renderNode(ctx, lis[i]!, depth, {
           ...opts,
           listType: tag === 'OL' ? 'ol' : 'ul',
           listIndex: i + 1,

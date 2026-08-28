@@ -19,8 +19,9 @@ export const createFenceTracker = (): FenceTracker => {
     check(trimmedLine: string) {
       const m = trimmedLine.match(/^(`{3,}|~{3,})/);
       if (!m) return false;
-      const c = m[1][0];
-      const l = m[1].length;
+      const g = m[1]!;
+      const c = g[0]!;
+      const l = g.length;
       if (!inFence) {
         inFence = true;
         fenceChar = c;
@@ -62,8 +63,8 @@ export const normalizeMarkdownPreserveCode = (text: string | null | undefined): 
     blankCount = 0;
 
     const m = line.match(/^(\s*)(.*?)$/);
-    const lead = m ? m[1] : '';
-    const rest = (m ? m[2] : line).replace(/[ \t]+/g, ' ').trimEnd();
+    const lead = m ? m[1]! : '';
+    const rest = (m ? m[2]! : line).replace(/[ \t]+/g, ' ').trimEnd();
     out.push(lead + rest);
   }
   return out.join('\n').replace(/^\n+|\n+$/g, '');
@@ -80,7 +81,7 @@ export const dedupeConsecutiveDuplicateLines = (
   const fence = createFenceTracker();
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
     const trimmed = line.trim();
     if (fence.check(trimmed)) {
       out.push(line);
@@ -94,7 +95,7 @@ export const dedupeConsecutiveDuplicateLines = (
     }
     if (trimmed.length > 0) {
       let j = i + 1;
-      while (j < lines.length && lines[j].trim() === trimmed) j++;
+      while (j < lines.length && lines[j]!.trim() === trimmed) j++;
       if (j - i >= threshold) {
         out.push(line);
         out.push(`<!-- AI: collapsed ${j - i - 1} consecutive duplicate line(s) -->`);
@@ -131,7 +132,7 @@ export const collapseShortAdjacentLines = (
   const flush = () => {
     if (buffer.length === 0) return;
     if (buffer.length === 1) {
-      out.push(buffer[0]);
+      out.push(buffer[0]!);
       buffer = [];
       return;
     }
@@ -148,7 +149,7 @@ export const collapseShortAdjacentLines = (
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     const trimmed = line.trim();
 
     if (trimmed === '---') {
@@ -212,7 +213,7 @@ export const cleanupPunctuation = (
   let seenFirstDashes = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     const trimmed = line.trim();
 
     if (trimmed === '---') {
@@ -262,7 +263,7 @@ export const dedupeAdjacentLinks = (
     const sigs: string[] = [];
     let m: RegExpExecArray | null;
     linkRe.lastIndex = 0;
-    while ((m = linkRe.exec(line)) !== null) sigs.push(m[1] + '|' + m[2]);
+    while ((m = linkRe.exec(line)) !== null) sigs.push(m[1]! + '|' + m[2]!);
     return sigs;
   };
 
@@ -326,8 +327,8 @@ export const suppressRepeatedImages = (
   for (const line of lines) {
     const m = line.match(imgRe);
     if (m) {
-      const alt = m[2];
-      const src = m[3];
+      const alt = m[2]!;
+      const src = m[3]!;
       const isGeneric = !alt || alt === 'image' || alt === 'Image link';
       if (isGeneric) srcCounts.set(src, (srcCounts.get(src) || 0) + 1);
     }
@@ -338,8 +339,8 @@ export const suppressRepeatedImages = (
   for (const line of lines) {
     const m = line.match(imgRe);
     if (m) {
-      const alt = m[2];
-      const src = m[3];
+      const alt = m[2]!;
+      const src = m[3]!;
       const isGeneric = !alt || alt === 'image' || alt === 'Image link';
       if (isGeneric && (srcCounts.get(src) || 0) >= threshold) {
         const seen = srcSeen.get(src) || 0;
@@ -396,14 +397,14 @@ export const dedupeRepeatedBlocks = (text: string): string => {
   let i = 0;
 
   while (i < lines.length) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (fence.check(trimmed)) {
-      out.push(lines[i]);
+      out.push(lines[i]!);
       i++;
       continue;
     }
     if (fence.inFence) {
-      out.push(lines[i]);
+      out.push(lines[i]!);
       i++;
       continue;
     }
@@ -424,7 +425,7 @@ export const dedupeRepeatedBlocks = (text: string): string => {
       }
 
       if (repeats >= 2) {
-        for (let k = i; k < i + blockSize; k++) out.push(lines[k]);
+        for (let k = i; k < i + blockSize; k++) out.push(lines[k]!);
         out.push(`<!-- AI: repeated block (${blockSize} lines × ${repeats} times) collapsed -->`);
         i = j;
         collapsed = true;
@@ -433,7 +434,7 @@ export const dedupeRepeatedBlocks = (text: string): string => {
     }
 
     if (!collapsed) {
-      out.push(lines[i]);
+      out.push(lines[i]!);
       i++;
     }
   }
@@ -512,7 +513,7 @@ export const dedupeTabPanelDuplicates = (text: string): string => {
     const norm = normForDedup(line);
     let found = -1;
     for (let p = 0; p < panelTexts.length; p++) {
-      if (panelTexts[p].has(norm)) {
+      if (panelTexts[p]!.has(norm)) {
         found = p;
         break;
       }

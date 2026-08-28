@@ -362,7 +362,7 @@ export const extractTextDelta = (beforeText: string, afterText: string): string 
     } else if (newPlainLines[i] === '-') {
       continue;
     } else {
-      merged.push(newPlainLines[i]);
+      merged.push(newPlainLines[i]!);
     }
   }
 
@@ -553,7 +553,7 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
           );
 
           if (otherIndex >= 0) {
-            const otherButton = g.buttons[otherIndex];
+            const otherButton = g.buttons[otherIndex]!;
             try {
               await clickAndWait(otherButton, root, config.tabClickWaitMs, config.tabSettleMs);
 

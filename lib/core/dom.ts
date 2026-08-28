@@ -112,7 +112,7 @@ export const parseSrcset = (s: string | null | undefined): Array<{ url: string; 
   return s
     .split(',')
     .map((p) => p.trim().split(/\s+/))
-    .map(([u, d]) => ({ url: u, weight: d ? parseFloat(d) : 0 }))
+    .map(([u, d]) => ({ url: u ?? '', weight: d ? parseFloat(d) : 0 }))
     .filter((c) => c.url);
 };
 
@@ -159,7 +159,7 @@ export const resolvePictureSrc = (pic: Element): SrcResolution => {
     candidates = candidates.concat(f.candidates);
     if (f.src) return { src: f.src, candidates };
   }
-  if (candidates.length) return { src: candidates[0], candidates };
+  if (candidates.length) return { src: candidates[0]!, candidates };
   return { src: '', candidates };
 };
 
@@ -258,7 +258,7 @@ export const getPrimaryContentRoot = (): Element => {
     .map((a) => ({ el: a, n: roughContentLength(a) }))
     .sort((x, y) => y.n - x.n);
   if (articles.length) {
-    const best = articles[0];
+    const best = articles[0]!;
     const containerLen = roughContentLength(container);
     const runnerUp = articles[1]?.n ?? 0;
     const dominatesContainer = containerLen > 0 && best.n / containerLen >= ARTICLE_DOMINANCE;

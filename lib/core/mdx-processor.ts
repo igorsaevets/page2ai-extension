@@ -85,11 +85,11 @@ export const convertMdxToMarkdown = (text: string | null | undefined, origin?: s
       .filter((l) => l.trim().length > 0)
       .map((l) => {
         const m = l.match(/^(\s*)/);
-        return m ? m[1].length : 0;
+        return m ? m[1]!.length : 0;
       });
     const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
 
-    out.push(codeBuffer[0].trim());
+    out.push(codeBuffer[0]!.trim());
     for (const l of contentLines) {
       if (l.trim().length === 0) out.push('');
       else out.push(l.substring(minIndent));

@@ -94,7 +94,7 @@ export const fetchOfficialMd = async (
       let match: RegExpExecArray | null;
       while ((match = linkRegex.exec(txt)) !== null) {
         try {
-          const u = new URL(match[1]);
+          const u = new URL(match[1]!);
           const p = u.pathname.replace(/\.md$/i, '').replace(/\/$/, '') || '/';
           if (p === currentPath) cands.push(u.href);
         } catch {
@@ -104,7 +104,7 @@ export const fetchOfficialMd = async (
       const plainRegex = /(?:^|\s)(https?:\/\/\S+?\.md)(?:\s|$)/gm;
       while ((match = plainRegex.exec(txt)) !== null) {
         try {
-          const u = new URL(match[1]);
+          const u = new URL(match[1]!);
           const p = u.pathname.replace(/\.md$/i, '').replace(/\/$/, '') || '/';
           if (p === currentPath) cands.push(u.href);
         } catch {
