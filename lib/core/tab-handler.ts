@@ -223,7 +223,13 @@ export const findControlledPanel = (btn: Element): Element | null => {
     let scoped: Element | null = null;
     let scope: Element | null = btn.parentElement;
     for (let i = 0; i < 5 && scope && !scoped; i++) {
-      scoped = scope.querySelector(`[id="${eid}"]`);
+      // A malformed id can make the selector throw; that must degrade to the
+      // document fallback, not kill the tab phase (panel review, T79).
+      try {
+        scoped = scope.querySelector(`[id="${eid}"]`);
+      } catch {
+        break;
+      }
       scope = scope.parentElement;
     }
     const panel = scoped || document.getElementById(controls);
@@ -489,7 +495,11 @@ export const captureCurrentTabPanel = async (
         const sig = makeTabSignature(delta);
         if (!state.capturedTabPanelTextSignatures.has(sig)) {
           state.capturedTabPanelTextSignatures.add(sig);
-          return { text: delta.slice(0, config.maxTabPanelChars), source: 'content-delta' };
+          return {
+            text: delta.slice(0, config.maxTabPanelChars),
+            source: 'content-delta',
+            truncated: delta.length > config.maxTabPanelChars,
+          };
         }
       }
     }
@@ -513,7 +523,11 @@ export const captureCurrentTabPanel = async (
       const sig = makeTabSignature(ft);
       if (state.capturedTabPanelTextSignatures.has(sig)) return null;
       state.capturedTabPanelTextSignatures.add(sig);
-      return { text: ft.slice(0, config.maxTabPanelChars), source: 'root-without-tab-buttons' };
+      return {
+        text: ft.slice(0, config.maxTabPanelChars),
+        source: 'root-without-tab-buttons',
+        truncated: ft.length > config.maxTabPanelChars,
+      };
     }
   }
 
@@ -674,14 +688,17 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
             ctx.progress('tabs', `active tab "${activeLabel}" captured (source: ${captured.source})`);
 
             // Mark the panel DOM element to prevent duplicate rendering in the
-            // main flow — only now that the content is actually exported (#11).
-            // Delta/clone captures carry no panelEl; the active panel is
-            // currently visible, so the finders should locate it.
-            resetComputedStyleCache();
-            const panelEl =
-              captured.panelEl || findControlledPanel(activeButton) || findPanelAfterGroup(g, root, config);
-            if (panelEl) {
-              state.capturedTabPanelElements.add(panelEl);
+            // main flow — only now that the content is actually exported (#11),
+            // and never for a truncated export: the visible in-place render is
+            // the complete copy then. Delta/clone captures carry no panelEl;
+            // the active panel is currently visible, so the finders locate it.
+            if (!captured.truncated) {
+              resetComputedStyleCache();
+              const panelEl =
+                captured.panelEl || findControlledPanel(activeButton) || findPanelAfterGroup(g, root, config);
+              if (panelEl) {
+                state.capturedTabPanelElements.add(panelEl);
+              }
             }
           }
         } else {

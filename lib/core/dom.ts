@@ -391,7 +391,18 @@ export const isProbablyUnsafeTabButton = (
   // the labels («Тёмная тема кода»), so the check is structural. Clicking a
   // theme toggle also MUTATES the reader's persisted site preference (#11).
   if (btn.closest('pre, devsite-code, [class*="devsite-code"]')) return true;
-  if (btn.closest('devsite-feedback, [class*="feedback"]')) return true;
+  // Feedback/rating widgets: devsite's thumbs live under <devsite-thumb-rating>
+  // (measured live — no "feedback" in any ancestor class, which is how the
+  // first version of this rule missed them). A button that carries real tab
+  // semantics is exempt, so a genuine tab widget on a page ABOUT a feedback
+  // product is still captured (panel review, T79).
+  const semanticTab = btn.getAttribute('role') === 'tab' || btn.hasAttribute('aria-controls');
+  if (
+    !semanticTab &&
+    btn.closest('devsite-feedback, devsite-thumb-rating, [class*="feedback"], [class*="thumb-rating"]')
+  ) {
+    return true;
+  }
   return config.unsafeTabButtonTextPatterns.some((p) => p.test(t));
 };
 

@@ -125,16 +125,27 @@ const FIXTURES = {
        <button type="button" onclick="window.__copyClicks=(window.__copyClicks||0)+1">Copy code sample</button>
      </div><code>TOOLBAR_CODE_PAYLOAD line one
 line two of the sample</code></pre>
-     <div class="page-feedback">
-       <p>Was this helpful?</p>
-       <button type="button" onclick="window.__fbClicks=(window.__fbClicks||0)+1">Helpful</button>
-       <button type="button" onclick="window.__fbClicks=(window.__fbClicks||0)+1">Not helpful</button>
-     </div>
+     <!-- The LIVE devsite shape, measured on ai.google.dev 2026-08-31: thumbs
+          under <devsite-thumb-rating>, no "feedback" substring anywhere. The
+          first fix tested a made-up class and missed this (panel review). -->
+     <devsite-thumb-rating>
+       <div class="devsite-thumb-rating"><p>Was this helpful?</p><div class="devsite-thumbs">
+         <button type="button" class="devsite-thumb devsite-thumb-up" aria-label="Helpful" onclick="window.__fbClicks=(window.__fbClicks||0)+1">Helpful</button>
+         <button type="button" class="devsite-thumb devsite-thumb-down" aria-label="Not helpful" onclick="window.__fbClicks=(window.__fbClicks||0)+1">Not helpful</button>
+       </div></div>
+     </devsite-thumb-rating>
      <h2>Real tabs still work</h2>
      ${tabWidget('real', [
        { label: 'Linux', panelId: 'os-linux', code: `${HEAD}REAL_LINUX_MIDDLE\n${TAIL}` },
        { label: 'Windows', panelId: 'os-win', code: `${HEAD}REAL_WINDOWS_MIDDLE\n${TAIL}` },
-     ])}`,
+     ])}
+     <h2>Docs page about a feedback product — semantic tabs must survive</h2>
+     <div class="feedback-tool-docs">
+       ${tabWidget('fbdocs', [
+         { label: 'Python SDK', panelId: 'fb-py', code: `${HEAD}FEEDBACK_DOCS_PY_MIDDLE\n${TAIL}` },
+         { label: 'REST', panelId: 'fb-rest', code: `${HEAD}FEEDBACK_DOCS_REST_MIDDLE\n${TAIL}` },
+       ])}
+     </div>`,
   ),
   '/oversize': page(
     'Oversize Panel',
@@ -296,6 +307,10 @@ try {
       JSON.stringify(clicks),
     );
     check('toolbar: real tab widget still captured (both middles)', count(md, 'REAL_LINUX_MIDDLE') === 1 && count(md, 'REAL_WINDOWS_MIDDLE') === 1);
+    check(
+      'toolbar: semantic tabs inside a *feedback* container still captured',
+      count(md, 'FEEDBACK_DOCS_PY_MIDDLE') === 1 && count(md, 'FEEDBACK_DOCS_REST_MIDDLE') === 1,
+    );
   }
 
   // 4. Oversize panel: left in place in full — the tail must survive and the

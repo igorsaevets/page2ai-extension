@@ -194,6 +194,10 @@ export interface TabPanelCapture {
   // marking inside the capture routine dropped panels whose capture was
   // later discarded).
   panelEl?: Element;
+  // True when the exported text was cut at maxTabPanelChars (delta/clone
+  // paths). A truncated export must never suppress the full in-place render
+  // of a visible panel (panel review, T79).
+  truncated?: boolean;
 }
 
 export interface DropdownPanelCapture {
