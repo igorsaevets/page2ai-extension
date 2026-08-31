@@ -79,6 +79,8 @@ export const createExtractorState = (): ExtractorState => ({
   originalScrollPosition: null,
   baselineBodyText: '',
   initialUrl: location.href,
+  initialHistoryState: history.state,
+  initialHistoryLength: history.length,
   tabCaptureAborted: false,
   tabPhaseStartMs: null,
   pendingTitleDedupe: '',

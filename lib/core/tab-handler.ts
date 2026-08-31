@@ -37,16 +37,34 @@ export const isUrlDrifted = (state: ExtractorState): boolean => location.href !=
 
 export const tryRestoreUrl = async (state: ExtractorState): Promise<boolean> => {
   if (!isUrlDrifted(state)) return true;
-  // Never restore with history.back(): tab widgets that mutate the URL via
-  // replace (devsite/ai.google.dev) push NO history entry, so back() steps out
-  // of the page entirely and destroys this content script mid-extraction (#10).
-  // replaceState rewrites the address in place — same document, a navigation is
-  // impossible by construction — and covers push-style drift too.
   try {
-    history.replaceState(history.state, '', state.initialUrl);
+    if (history.length > state.initialHistoryLength) {
+      // Strict growth since the last restore means the click pushed an entry
+      // ABOVE ours during this run, so back() lands on our own page, pops the
+      // entry (no Back-button pollution) and fires the popstate the site may
+      // rely on.
+      history.back();
+      await sleep(300);
+    } else {
+      // No growth ⇒ replace-style drift (devsite/ai.google.dev): there is
+      // nothing above ours to go back to — back() here steps out of the page
+      // and destroys this content script mid-extraction (#10). replaceState
+      // rewrites the address on the same document, where a navigation is
+      // impossible, and restores the state snapshot taken at extraction
+      // start, not the widget's. (Also the safe fallback at the 50-entry
+      // history cap, where growth becomes invisible.)
+      history.replaceState(state.initialHistoryState, '', state.initialUrl);
+    }
   } catch {
-    // sandboxed frames can refuse history access
+    // Sandboxed frames refuse history access; rate-limited replaceState
+    // throws SecurityError. Either way the drift stays and the caller aborts
+    // tab capture gracefully.
   }
+  // history.length never shrinks on back(), so growth is only meaningful
+  // relative to the LAST restore: without this resync, one push-style restore
+  // would lock every later replace-style drift into the back() branch — and
+  // out of the page.
+  state.initialHistoryLength = Math.max(state.initialHistoryLength, history.length);
   return !isUrlDrifted(state);
 };
 
@@ -567,7 +585,7 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
                   state.tabCaptureAborted = true;
                   ctx.progress(
                     'tabs',
-                    `URL drifted in Phase 1 (active tab "${activeLabel}") and history.back() failed — aborting all remaining tab groups`,
+                    `URL drifted in Phase 1 (active tab "${activeLabel}") and could not be restored — aborting all remaining tab groups`,
                     'warn',
                   );
                 }
@@ -667,7 +685,7 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
             state.tabCaptureAborted = true;
             ctx.progress(
               'tabs',
-              `history.back() failed after "${label}" — aborting all remaining tab groups`,
+              `URL restore failed after "${label}" — aborting all remaining tab groups`,
               'warn',
             );
             break;

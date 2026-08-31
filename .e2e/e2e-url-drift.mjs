@@ -120,6 +120,7 @@ try {
     const pageUrl = `http://127.0.0.1:${port}/${name}`;
     const page = await browser.newPage();
     await page.goto(pageUrl, { waitUntil: 'load' });
+    const lengthBefore = await page.evaluate(() => history.length);
 
     const swTarget = await browser.waitForTarget(
       (t) => t.type() === 'service_worker' && t.url().endsWith('background.js'),
@@ -177,6 +178,17 @@ try {
       `${name}: tab still on the fixture page (no navigation escape)`,
       typeof tabUrl === 'string' && tabUrl.startsWith(`http://127.0.0.1:${port}/${name}`),
       tabUrl,
+    );
+
+    // History fidelity (#10 panel review): replace-style restore must add no
+    // entries at all; push-style may leave at most the rewritten duplicates
+    // of the tabs it clicked (here: one non-active tab).
+    const lengthAfter = await page.evaluate(() => history.length);
+    const delta = lengthAfter - lengthBefore;
+    check(
+      `${name}: history not polluted (delta ${name === 'replace-drift' ? '=== 0' : '<= 1'})`,
+      name === 'replace-drift' ? delta === 0 : delta <= 1,
+      `before=${lengthBefore} after=${lengthAfter}`,
     );
 
     await page.close().catch(() => {});

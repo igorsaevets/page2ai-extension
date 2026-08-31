@@ -28,16 +28,23 @@ const CHROME_CANDIDATES = [
 
 const args = process.argv.slice(2);
 let outDir = '.e2e/out';
+// en-US by default so results do not depend on the machine locale: Google
+// serves machine-translated pages (ru-x-mtfrom-en) to a ru-RU browser.
+let lang = 'en-US';
 const urls = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--out') {
     outDir = args[++i];
     continue;
   }
+  if (args[i] === '--lang') {
+    lang = args[++i];
+    continue;
+  }
   urls.push(args[i]);
 }
 if (!urls.length) {
-  console.error('usage: node .e2e/extract-url.mjs [--out <dir>] <url> [<url>...]');
+  console.error('usage: node .e2e/extract-url.mjs [--out <dir>] [--lang <bcp47>] <url> [<url>...]');
   process.exit(2);
 }
 
@@ -73,6 +80,8 @@ async function launch(headless) {
       '--disable-features=ChromeWhatsNewUI',
       '--no-sandbox',
       '--disable-dev-shm-usage',
+      `--lang=${lang}`,
+      `--accept-lang=${lang}`,
     ],
   });
 }

@@ -265,6 +265,14 @@ export interface ExtractorState {
   originalScrollPosition: { x: number; y: number } | null;
   baselineBodyText: string;
   initialUrl: string;
+  // Snapshot taken at extraction start (#10 review): a drift restore must put
+  // back THIS state, not whatever the clicked tab widget left in
+  // history.state; and the length baseline tells push-style drift (an entry
+  // was added — back() is safe and clean) from replace-style (nothing to go
+  // back to — back() would leave the page). The length baseline is RESYNCED
+  // after every restore, because history.length never shrinks on back().
+  initialHistoryState: unknown;
+  initialHistoryLength: number;
   // Set to true when tab capture must halt for the WHOLE page — e.g. URL drift
   // after a tab click that history.back() cannot restore. Local `aborted` flags
   // were only skipping the inner button loop, leaving remaining tab groups to
