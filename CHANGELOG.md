@@ -4,6 +4,12 @@ All notable changes to Page2AI are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Duplicate H1 when the page's own `<h1>` equals `document.title`** ([#8](https://github.com/igorsaevets/page2ai-extension/issues/8), port of [page2ai-core#9](https://github.com/igorsaevets/page2ai-core/issues/9)). The output opens with a synthetic title heading, and the DOM walk then rendered the page's own `<h1>` — on most well-formed pages the same string, so files started with two identical H1s (reproduced in-browser on `example.com` and `iana.org/help/example-domains`). The first heading the walk meets is now skipped when its normalized `textContent` equals the title; the dedupe window closes at that first heading either way, so an identical heading later in the page is content and still renders. The comparison runs on `textContent`, not the rendered markdown, so escaping cannot defeat it. The official-markdown short path got the matching treatment: a mirror whose first line is the same H1 no longer duplicates it. Covered by a new e2e suite (`.e2e/e2e-title-dedupe.mjs`, in CI): duplicate, distinct-title, later-identical-heading, markdown-specials, empty-title (over-removal guard) and official-mirror fixtures, 13 checks.
+
 ## [1.3.0] - 2026-07-27
 
 ### Added

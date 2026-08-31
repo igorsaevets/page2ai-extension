@@ -83,3 +83,10 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-spa.mjs
+
+      # #8 regression: the synthetic title heading must not duplicate the
+      # page's own first heading, on the DOM-walk path and the official-md path.
+      - name: Title-dedupe suite
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-title-dedupe.mjs

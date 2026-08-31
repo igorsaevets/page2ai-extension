@@ -273,6 +273,12 @@ export interface ExtractorState {
   // Wall-clock timestamp when extractTabPanels() started, used for the
   // cumulative phase budget (config.tabPhaseBudgetMs). Null before Phase runs.
   tabPhaseStartMs: number | null;
+  // #8 (port of core#9): normalized document.title while the title-dedupe
+  // window is open. Seeded right before the main body walk; the first heading
+  // the walk meets closes the window, and is skipped if it matches. Empty
+  // string = window closed / inactive, so captures that run before the main
+  // walk (tab panels) can never consume the window.
+  pendingTitleDedupe: string;
 }
 
 // Everything a render/capture function needs, replacing the prototype's closures.

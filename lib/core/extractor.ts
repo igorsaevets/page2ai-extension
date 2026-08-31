@@ -81,6 +81,7 @@ export const createExtractorState = (): ExtractorState => ({
   initialUrl: location.href,
   tabCaptureAborted: false,
   tabPhaseStartMs: null,
+  pendingTitleDedupe: '',
 });
 
 // --- Details expand / restore (Section 25) ---
@@ -438,6 +439,21 @@ export const buildAppendix = (ctx: ExtractContext): string[] => {
 export const buildFilename = (config: ResolvedConfig): string =>
   `${slugify(document.title)}.${config.fileExtension}`;
 
+// #8: the official-markdown short path prepends the same synthetic title
+// heading, and official mirrors routinely open with their own identical H1.
+// Drop the mirror's leading heading when its normalized text equals the title.
+// Only a heading on the first non-blank line qualifies; anything else — other
+// text, a different title, markdown the mirror escaped differently — is kept.
+const dropLeadingDuplicateTitleHeading = (md: string, title: string): string => {
+  if (!title) return md;
+  const lines = md.split('\n');
+  let i = 0;
+  while (i < lines.length && !lines[i]!.trim()) i++;
+  const m = i < lines.length ? /^#{1,6}\s+(.+)$/.exec(lines[i]!.trim()) : null;
+  if (!m || cleanInline(m[1]) !== title) return md;
+  return lines.slice(i + 1).join('\n');
+};
+
 // --- Main pipeline (Section 41) ---
 
 export const runExtractor = async (
@@ -473,7 +489,10 @@ export const runExtractor = async (
           : 1;
       if (ratio >= config.officialMarkdownMinRatio) {
         // Convert MDX components to clean Markdown before output.
-        const cleanedMd = convertMdxToMarkdown(officialMd.markdown);
+        const cleanedMd = dropLeadingDuplicateTitleHeading(
+          convertMdxToMarkdown(officialMd.markdown),
+          cleanInline(document.title),
+        );
         const md = normalizeMarkdownPreserveCode(
           dedupeConsecutiveDuplicateLines(
             [
@@ -528,6 +547,11 @@ export const runExtractor = async (
           }
         : {},
     );
+    // #8 (port of core#9): the composed document below opens with a synthetic
+    // title heading, and on most well-formed pages the first heading the walk
+    // meets is the page's own <h1> with the same text. Seeded here, after tab
+    // capture, so panel rendering can never consume the window.
+    state.pendingTitleDedupe = cleanInline(document.title);
     const bodyLines = renderNode(ctx, document.body, 0);
     const mrt = bodyLines.join('\n');
 

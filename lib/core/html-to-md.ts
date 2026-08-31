@@ -826,8 +826,21 @@ export const renderNode = (
     const level = Number(tag.slice(1));
     const t = renderInlineChildren(ctx, el) || cleanInline(el.innerText || el.textContent);
     if (t) {
-      lines.push('', `${'#'.repeat(level)} ${t}`, '');
-      ctx.appendix.headings++;
+      // #8 (port of core#9): while the title-dedupe window is open, the first
+      // heading the walk meets is skipped when its normalized textContent
+      // equals the synthetic title heading (textContent, not the rendered
+      // markdown — escaping must not defeat the comparison). The window closes
+      // at this first heading either way, so an identical heading later in the
+      // page is content and always renders.
+      let skipAsTitleDup = false;
+      if (ctx.state.pendingTitleDedupe) {
+        skipAsTitleDup = cleanInline(el.textContent || '') === ctx.state.pendingTitleDedupe;
+        ctx.state.pendingTitleDedupe = '';
+      }
+      if (!skipAsTitleDup) {
+        lines.push('', `${'#'.repeat(level)} ${t}`, '');
+        ctx.appendix.headings++;
+      }
     }
   } else if (tag === 'PRE') {
     lines.push(...renderCodeBlock(ctx, el));
