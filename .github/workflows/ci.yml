@@ -97,3 +97,11 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-url-drift.mjs
+
+      # #11 regression: visible tab-panel content is never dropped — duplicate
+      # panel ids resolve near the button, dedupe is full-content, toolbar and
+      # feedback chrome is neither grouped as tabs nor clicked.
+      - name: Tab-panels suite
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-tab-panels.mjs

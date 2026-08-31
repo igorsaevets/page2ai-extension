@@ -386,6 +386,12 @@ export const isProbablyUnsafeTabButton = (
   if (btn.closest('form') || isNavigationLikeButton(btn) || !isDiscoverablyVisible(btn)) {
     return true;
   }
+  // Code-toolbar chrome (theme toggle, copy) and page-feedback widgets are
+  // never content tabs. Text patterns cannot catch these: devsite localizes
+  // the labels («Тёмная тема кода»), so the check is structural. Clicking a
+  // theme toggle also MUTATES the reader's persisted site preference (#11).
+  if (btn.closest('pre, devsite-code, [class*="devsite-code"]')) return true;
+  if (btn.closest('devsite-feedback, [class*="feedback"]')) return true;
   return config.unsafeTabButtonTextPatterns.some((p) => p.test(t));
 };
 

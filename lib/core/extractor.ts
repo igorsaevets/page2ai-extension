@@ -71,6 +71,7 @@ export const createExtractorState = (): ExtractorState => ({
   tabPanelsByButtonId: new Map(),
   dropdownPanelsByButtonId: new Map(),
   capturedTabPanelElements: new WeakSet(),
+  dedupSuppressedTabPanelElements: new WeakSet(),
   capturedDropdownPanelElements: new WeakSet(),
   capturedTabPanelTextSignatures: new Set(),
   knownTabButtonIds: new Set(),

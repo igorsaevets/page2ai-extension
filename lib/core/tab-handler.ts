@@ -214,7 +214,19 @@ export const getTextFromCloneExcludingGroup = (r: Element, gc: Element): string 
 export const findControlledPanel = (btn: Element): Element | null => {
   const controls = btn.getAttribute('aria-controls');
   if (controls) {
-    const panel = document.getElementById(controls);
+    // Resolve the id NEAR the button before the document-wide lookup.
+    // Real pages repeat panel ids across widgets (devsite gives EVERY group
+    // id="tabpanel-python"), and getElementById always returns the first
+    // match — so every group after the first captured group 1's panel and
+    // its own content was lost as a "duplicate" (#11).
+    const eid = window.CSS && CSS.escape ? CSS.escape(controls) : controls.replace(/"/g, '\\"');
+    let scoped: Element | null = null;
+    let scope: Element | null = btn.parentElement;
+    for (let i = 0; i < 5 && scope && !scoped; i++) {
+      scoped = scope.querySelector(`[id="${eid}"]`);
+      scope = scope.parentElement;
+    }
+    const panel = scoped || document.getElementById(controls);
     if (panel) {
       const dataState = panel.getAttribute('data-state');
       if (dataState === 'active') return panel;
@@ -395,9 +407,17 @@ export const extractTextDelta = (beforeText: string, afterText: string): string 
   return parts.join('\n\n');
 };
 
+// Full-content signature. Head/tail alone is not enough: code samples for the
+// same API share their first and last 200 chars (same imports, same closing
+// print) while differing in the middle — on ai.google.dev that false collision
+// suppressed 4 of 5 groups' panels as "duplicates" and dropped their content
+// entirely (#11). Length + a full-text hash makes collisions practically
+// impossible; the head stays for debuggability.
 export const makeTabSignature = (text: string | null | undefined): string => {
   const t = String(text || '');
-  return t.slice(0, 200) + '||' + t.slice(-200);
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return `${t.length}:${(h >>> 0).toString(36)}:${t.slice(0, 200)}`;
 };
 
 export const captureCurrentTabPanel = async (
@@ -424,14 +444,32 @@ export const captureCurrentTabPanel = async (
     if (j) {
       const sig = makeTabSignature(j);
       if (state.capturedTabPanelTextSignatures.has(sig)) {
-        state.capturedTabPanelElements.add(panel);
+        // True duplicate of an already-exported panel. Suppress it at its
+        // original location, but through the dedicated set so the renderer
+        // says WHY — and never through capturedTabPanelElements, which
+        // promises the content was exported (#11).
+        state.dedupSuppressedTabPanelElements.add(panel);
+        ctx.progress(
+          'tabs',
+          `tab "${getButtonText(btn)}" panel suppressed as a duplicate of an already-exported panel`,
+        );
+        return null;
+      }
+      if (j.length > config.maxTabPanelChars) {
+        // Exporting would truncate; the panel is left unmarked so the main
+        // render keeps it in place, in full (#11).
+        ctx.progress(
+          'tabs',
+          `tab "${getButtonText(btn)}" panel too large to relocate (${j.length} > ${config.maxTabPanelChars} chars) — leaving it in place`,
+          'warn',
+        );
         return null;
       }
       state.capturedTabPanelTextSignatures.add(sig);
-      state.capturedTabPanelElements.add(panel);
       return {
-        lines: j.slice(0, config.maxTabPanelChars).split('\n'),
+        lines: j.split('\n'),
         source: cp ? 'aria-controls' : 'panel-after-group',
+        panelEl: panel,
       };
     }
   }
@@ -636,10 +674,12 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
             ctx.progress('tabs', `active tab "${activeLabel}" captured (source: ${captured.source})`);
 
             // Mark the panel DOM element to prevent duplicate rendering in the
-            // main flow: the active panel is currently visible, so the finders
-            // should locate it.
+            // main flow — only now that the content is actually exported (#11).
+            // Delta/clone captures carry no panelEl; the active panel is
+            // currently visible, so the finders should locate it.
             resetComputedStyleCache();
-            const panelEl = findControlledPanel(activeButton) || findPanelAfterGroup(g, root, config);
+            const panelEl =
+              captured.panelEl || findControlledPanel(activeButton) || findPanelAfterGroup(g, root, config);
             if (panelEl) {
               state.capturedTabPanelElements.add(panelEl);
             }
@@ -717,6 +757,9 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
 
         state.tabPanelsByButtonId.set(bid, { label, ...cp });
         ctx.appendix.capturedTabs.push({ label, source: cp.source });
+        // Suppress the panel at its original location only because its content
+        // is now exported under this button (#11).
+        if (cp.panelEl) state.capturedTabPanelElements.add(cp.panelEl);
       } catch (e) {
         ctx.progress('tabs', `failed tab "${label}": ${String(e)}`, 'warn');
       }

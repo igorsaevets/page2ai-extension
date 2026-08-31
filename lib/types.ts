@@ -189,6 +189,11 @@ export interface TabPanelCapture {
   lines?: string[];
   text?: string;
   source: TabCaptureSource;
+  // The DOM panel this capture came from, when one was located. The CALLER
+  // marks it as captured only after actually exporting the content (#11:
+  // marking inside the capture routine dropped panels whose capture was
+  // later discarded).
+  panelEl?: Element;
 }
 
 export interface DropdownPanelCapture {
@@ -257,6 +262,10 @@ export interface ExtractorState {
   tabPanelsByButtonId: Map<string, TabPanelCapture>;
   dropdownPanelsByButtonId: Map<string, DropdownPanelCapture>;
   capturedTabPanelElements: WeakSet<Element>;
+  // Panels whose content is a byte-duplicate of a panel already exported
+  // above (#11). Skipped at their original location like captured panels,
+  // but with a marker that says the content exists above — never silently.
+  dedupSuppressedTabPanelElements: WeakSet<Element>;
   capturedDropdownPanelElements: WeakSet<Element>;
   capturedTabPanelTextSignatures: Set<string>;
   knownTabButtonIds: Set<string>;

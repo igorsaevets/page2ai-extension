@@ -690,6 +690,10 @@ export const renderNode = (
     lines.push('', '<!-- AI: TAB PANEL ORIGINAL LOCATION SKIPPED -->', '');
     return lines;
   }
+  if (opts.skipCapturedTabPanels && ctx.state.dedupSuppressedTabPanelElements.has(el)) {
+    lines.push('', '<!-- AI: TAB PANEL DUPLICATE OF A PANEL EXPORTED ABOVE (skipped) -->', '');
+    return lines;
+  }
   if (opts.skipCapturedDropdownPanels && ctx.state.capturedDropdownPanelElements.has(el)) {
     lines.push('', '<!-- AI: DROPDOWN PANEL ORIGINAL LOCATION SKIPPED -->', '');
     return lines;

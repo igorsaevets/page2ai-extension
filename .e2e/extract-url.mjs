@@ -132,9 +132,20 @@ try {
       }, finalUrl);
       if (tabId == null) throw new Error('tab not visible from service worker');
 
-      // Same two-step injection the background performs.
+      // Same two-step injection the background performs. Also accumulate the
+      // extractor's PAGE2AI_PROGRESS stream — saved next to the markdown, it is
+      // the only record of which capture paths fired on a live page.
       await sw.evaluate(async (tabId) => {
         globalThis.__e2eInjectError = null;
+        globalThis.__e2eProgress = [];
+        if (!globalThis.__e2eProgressListener) {
+          globalThis.__e2eProgressListener = (m) => {
+            if (m && m.type === 'PAGE2AI_PROGRESS') {
+              globalThis.__e2eProgress.push(`[${m.step}]${m.level === 'warn' ? ' ⚠' : ''} ${m.message}`);
+            }
+          };
+          chrome.runtime.onMessage.addListener(globalThis.__e2eProgressListener);
+        }
         await chrome.scripting.executeScript({
           target: { tabId },
           func: (key, opts) => {
@@ -167,8 +178,12 @@ try {
 
       const { result } = cached;
       const md = result.markdown || '';
+      const progressLines = await sw
+        .evaluate(() => globalThis.__e2eProgress ?? [])
+        .catch(() => []);
       writeFileSync(path.join(outDir, `${slug}.md`), md, 'utf8');
       writeFileSync(path.join(outDir, `${slug}.innertext.txt`), truth.innerText, 'utf8');
+      writeFileSync(path.join(outDir, `${slug}.progress.txt`), progressLines.join('\n'), 'utf8');
       writeFileSync(
         path.join(outDir, `${slug}.meta.json`),
         JSON.stringify(
