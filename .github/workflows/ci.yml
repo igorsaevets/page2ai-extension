@@ -90,3 +90,10 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-title-dedupe.mjs
+
+      # #10 regression: URL drift during tab capture (replace-style and
+      # push-style) must never kill the extraction or navigate the tab away.
+      - name: URL-drift suite
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-url-drift.mjs

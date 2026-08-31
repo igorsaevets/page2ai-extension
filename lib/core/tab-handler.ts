@@ -37,11 +37,15 @@ export const isUrlDrifted = (state: ExtractorState): boolean => location.href !=
 
 export const tryRestoreUrl = async (state: ExtractorState): Promise<boolean> => {
   if (!isUrlDrifted(state)) return true;
+  // Never restore with history.back(): tab widgets that mutate the URL via
+  // replace (devsite/ai.google.dev) push NO history entry, so back() steps out
+  // of the page entirely and destroys this content script mid-extraction (#10).
+  // replaceState rewrites the address in place — same document, a navigation is
+  // impossible by construction — and covers push-style drift too.
   try {
-    history.back();
-    await sleep(300);
+    history.replaceState(history.state, '', state.initialUrl);
   } catch {
-    // history.back can throw in sandboxed frames
+    // sandboxed frames can refuse history access
   }
   return !isUrlDrifted(state);
 };
