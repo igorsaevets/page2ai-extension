@@ -15,7 +15,7 @@ If you find a security issue in Page2AI (unexpected data exfiltration, ability t
 
 Instead:
 
-1. Email **igorsaevets@gmail.com** with subject `[Page2AI Security] <short description>`.
+1. Email **support@igorsaevets.com** with subject `[Page2AI Security] <short description>`.
 2. Include: what you found, how to reproduce, potential impact, suggested fix if you have one.
 3. Expect a response within 3 business days.
 

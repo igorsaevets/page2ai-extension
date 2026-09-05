@@ -9,7 +9,7 @@ export default defineConfig({
     // Chrome accepts the MV3 object form; Mozilla's validator rejects it outright
     // ("MANIFEST_FIELD_INVALID: /author must be string"), so Firefox gets a string.
     // Caught by `web-ext lint` before the AMO upload, not by AMO after it.
-    author: browser === 'firefox' ? 'Igor Saevets' : { email: 'igorsaevets@gmail.com' },
+    author: browser === 'firefox' ? 'Igor Saevets' : { email: 'support@igorsaevets.com' },
     homepage_url: 'https://github.com/igorsaevets/page2ai-extension',
     permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage'],
     commands: {

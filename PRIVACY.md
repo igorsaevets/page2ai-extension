@@ -11,7 +11,7 @@ If you don't want to trust the summary, the rest of this document walks through 
 
 ## Who this policy applies to
 
-This policy covers the Page2AI browser extension published on the Chrome Web Store (and, in the future, Firefox Add-ons and Microsoft Edge Add-ons). The publisher is **Igor Saevets** (`igorsaevets@gmail.com`), an independent open-source developer.
+This policy covers the Page2AI browser extension published on the Chrome Web Store (and, in the future, Firefox Add-ons and Microsoft Edge Add-ons). The publisher is **Igor Saevets** (`support@igorsaevets.com`), an independent open-source developer.
 
 The source code that implements this policy is public and MIT-licensed at [github.com/igorsaevets/page2ai-extension](https://github.com/igorsaevets/page2ai-extension). Anything you read here can be verified against that source.
 
@@ -133,7 +133,7 @@ If this policy changes materially (for example, if a future version of Page2AI i
 ## Contact
 
 - **Issues, questions, bug reports:** [github.com/igorsaevets/page2ai-extension/issues](https://github.com/igorsaevets/page2ai-extension/issues)
-- **Email:** [igorsaevets@gmail.com](mailto:igorsaevets@gmail.com)
+- **Email:** [support@igorsaevets.com](mailto:support@igorsaevets.com)
 
 ## Google Limited Use compliance statement
 
