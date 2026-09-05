@@ -6,9 +6,10 @@
 
 **Convert any webpage to clean, LLM-ready Markdown in one click.**
 
-Chrome extension for Claude, ChatGPT, Cursor, Obsidian, and RAG pipelines. 100% local. Open source. MIT.
+Browser extension for Chrome and Firefox. Built for Claude, ChatGPT, Cursor, Obsidian, and RAG pipelines. 100% local. Open source. MIT.
 
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dlpaaijcnbbmlfeohlphjpnbbcnomnno?logo=googlechrome&logoColor=white&label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)
+[![Firefox Add-ons](https://img.shields.io/amo/v/page2ai-webpage-to-markdown?logo=firefox&logoColor=white&label=Firefox%20Add-ons)](https://addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/)
 [![License MIT](https://img.shields.io/badge/License-MIT-4f46e5.svg)](LICENSE)
 [![Build](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml/badge.svg)](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml)
 [![GitHub stars](https://img.shields.io/github/stars/igorsaevets/page2ai-extension?style=social)](https://github.com/igorsaevets/page2ai-extension/stargazers)
@@ -48,7 +49,7 @@ Page2AI grabs the actual content. It captures hidden tabs. It outputs Markdown w
 
 ## Install
 
-Works in Chrome, Edge, Brave, Arc, Vivaldi, and other Chromium browsers.
+Works in Chrome, Firefox, Edge, Brave, Arc, Vivaldi, and other Chromium browsers.
 
 ### Chrome Web Store (recommended)
 
@@ -66,6 +67,11 @@ curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&accep
 ```
 
 `status="ok"` plus a version means it is live. `error-unknownApplication` means it is not.
+
+### Firefox Add-ons
+
+**[Page2AI on Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/)** —
+approved and public since **2026-07-31** (v1.3.0). Works in Firefox, Firefox Developer Edition, and Firefox Nightly.
 
 ### Install from a release
 
@@ -92,6 +98,34 @@ npm run build
 4. Markdown lands in your clipboard. Paste it into Claude, ChatGPT, Cursor, or your RAG pipeline.
 
 Progress log runs live in the popup. If you close the popup mid-extraction, the badge shows a checkmark when the result is ready. Reopen it to recover.
+
+## For AI Agents (MCP Server)
+
+The same extraction engine is available as an [MCP server](https://modelcontextprotocol.io) for AI coding assistants. Your agent reads any webpage as clean Markdown — the same output the extension produces, called programmatically.
+
+**Hosted (zero install):**
+
+```
+https://page2ai-mcp-remote.vercel.app/api/mcp
+```
+
+Point Claude Code, Cursor, Windsurf, Cline, or any MCP-compatible client at this URL. Nothing to install.
+
+**Local:**
+
+```bash
+npm install -g @page2ai/mcp
+```
+
+Same engine, your machine, no cloud.
+
+**Core library** for custom pipelines:
+
+```bash
+npm install @page2ai/core
+```
+
+Source and docs: [page2ai-mcp](https://github.com/igorsaevets/page2ai-mcp) | [page2ai-core](https://github.com/igorsaevets/page2ai-core).
 
 ## Compared to other extensions
 
@@ -167,7 +201,9 @@ Page2AI runs on and interoperates with open technical standards from the US AI d
 - **CommonMark / GitHub Flavored Markdown**. The lingua franca of LLM context windows.
 - **JSON-LD** (W3C standard). Surfaced in the frontmatter for schema-aware RAG pipelines.
 - **[`llms.txt` proposal](https://llmstxt.org)**. Used as a short-path when the site publishes one.
-- **Chrome Web Store** (Google). Distribution channel with automated review and updates.
+- **[Model Context Protocol](https://modelcontextprotocol.io)** (Anthropic). AI agent integration via MCP server.
+- **Chrome Web Store** (Google). Distribution for Chromium browsers with automated review and updates.
+- **Firefox Add-ons** (Mozilla). Distribution for Firefox with automated review.
 - **GitHub** (Microsoft). Code hosting, CI/CD, release automation.
 
 Downstream consumers of Page2AI Markdown include US-based AI platforms (Anthropic Claude, OpenAI GPT, Google Gemini, Meta Llama, xAI Grok) and AI-native developer tools (Cursor, GitHub Copilot, Windsurf, Vercel AI SDK, LangChain, LlamaIndex).
