@@ -26,7 +26,7 @@ curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&accep
 
 <br>
 
-<sub>Demo GIF recording in progress. Check back soon.</sub>
+<img src="assets/store/screenshot-2-openwebui-tools-1280x800.png" width="720" alt="Page2AI popup showing extraction progress on Open WebUI docs">
 
 </div>
 
@@ -98,6 +98,22 @@ npm run build
 4. Markdown lands in your clipboard. Paste it into Claude, ChatGPT, Cursor, or your RAG pipeline.
 
 Progress log runs live in the popup. If you close the popup mid-extraction, the badge shows a checkmark when the result is ready. Reopen it to recover.
+
+## Screenshots
+
+Three real captures, taken on live sites, no cropping or retouching.
+
+**Marketing page with hidden tabs** — xAI Grok 4.5 product page. Marketing sites hide code samples behind tabs, cookie banners, and analytics widgets. Page2AI captures the actual content and drops everything else.
+
+<img src="assets/store/screenshot-3-xai-grok-45-1280x800.png" width="720" alt="Page2AI popup on xai.com/grok showing extraction progress with hidden code tabs captured">
+
+**Docs page with multi-language code samples** — Open WebUI Tools reference. Docs sites render dynamically, hide Python/TypeScript/cURL tabs, and dump nav into the DOM. Page2AI walks every tab group and captures each panel labeled by language.
+
+<img src="assets/store/screenshot-2-openwebui-tools-1280x800.png" width="720" alt="Page2AI popup on Open WebUI docs showing per-tab code capture">
+
+**Government long-form** — USCIS EB-1 policy manual. Regulatory PDFs and long-form pages break most extractors because the primary content sits inside deep card grids. Page2AI's article-detection heuristic finds the real body, drops the boilerplate.
+
+<img src="assets/store/screenshot-1-uscis-eb1-1280x800.png" width="720" alt="Page2AI popup on USCIS EB-1 policy manual showing full body extraction">
 
 ## For AI Agents (MCP Server)
 
