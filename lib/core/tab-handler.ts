@@ -2,7 +2,7 @@
 // content-delta fallbacks, URL drift protection.
 // Ported from Rev-032v2 prototype (Sections 26, 33-34 + URL drift from 24).
 
-import { cleanBlock, cleanInline, sleep, withHardTimeout } from './utils';
+import { cleanBlock, sleep, withHardTimeout } from './utils';
 import {
   clickAndWait,
   getButtonFallbackLabel,
@@ -111,6 +111,36 @@ export const hasTabLikeAttributes = (bs: HTMLElement[]): boolean =>
       /active|selected|current|primary|bg-primary/i.test(b.className || ''),
   );
 
+// A pure `<button type="button">` (the HTML default) sitting in a `<div>` is
+// not a tab widget on its own — it is the most common ordinary button in the
+// DOM. Before we click it as if it switched content, require a POSITIVE
+// signal on the group's container: an ARIA/Radix marker, or a legacy
+// CSS convention name for a tab strip. When both this and hasTabLikeAttributes
+// fail, the group is ambiguous and we skip it. Bug #12: real extension on a
+// Vietnamese fixture clicked Like/Bookmark/Xóa/Đăng ký because the old
+// fallback accepted any pair of default-type buttons.
+export const hasTabLikeAncestor = (el: Element | null): boolean => {
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+  // Walk up at most two levels — real tab widgets wrap the button strip in
+  // one container plus optionally the widget root; further and we start
+  // matching unrelated ancestors (e.g. a page-wide `.tabs-container` layout).
+  let node: Element | null = el;
+  for (let i = 0; i < 3 && node; i++) {
+    if (node.getAttribute('role') === 'tablist') return true;
+    if (
+      node.hasAttribute('data-tabs') ||
+      node.hasAttribute('data-tablist') ||
+      node.hasAttribute('data-orientation')
+    ) {
+      return true;
+    }
+    const cls = typeof node.className === 'string' ? node.className : '';
+    if (/\b(tabs?|tablist|tab-nav|tab-bar|tab-list|nav-tabs)\b/i.test(cls)) return true;
+    node = node.parentElement;
+  }
+  return false;
+};
+
 // Discovers every real tab/code group, even when labels repeat. Mintlify reuses
 // Python|TypeScript across many code groups: dedup by labels alone kept only the
 // first group, so the signature is labels + heading context + DOM position.
@@ -156,11 +186,13 @@ export const discoverTabGroups = (ctx: ExtractContext): TabGroup[] => {
       return t.length >= config.minTabButtonTextLength && t.length <= config.maxTabButtonTextLength;
     });
     if (fb.length < 2) return;
-    const allBtn = fb.every((b) => {
-      const tp = cleanInline(b.getAttribute('type') || 'button').toLowerCase();
-      return tp === 'button' || b.getAttribute('role') === 'tab';
-    });
-    if (!allBtn && !hasTabLikeAttributes(fb)) return;
+    // #12: a same-parent button group is a tab widget only when there is
+    // POSITIVE evidence — either a per-button ARIA/framework signal or a
+    // container class the wider ecosystem uses for tab strips (Bootstrap,
+    // jQuery UI, WordPress themes). The old "all elements are buttons"
+    // shortcut accepted every pair of default `<button type="button">`
+    // siblings and clicked them as tabs.
+    if (!hasTabLikeAttributes(fb) && !hasTabLikeAncestor(p)) return;
     push(p, fb, 'same-parent-buttons');
   });
   return groups.slice(0, config.maxTabGroups);

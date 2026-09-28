@@ -1,21 +1,34 @@
-// Page2AI e2e suite for issue #11: visible tab-panel content must never be
-// dropped. Four fixtures, each modeling a mechanism measured live on
-// ai.google.dev/gemini-api/docs/thinking:
+// Page2AI e2e suite for issues #11 and #12.
 //
-//  /dup-ids   — two widgets reuse the SAME panel ids (devsite does this), and
-//               their code samples share the first/last 200 chars. Pre-fix,
-//               aria-controls resolved to widget 1's panel for both widgets and
-//               the head/tail signature called different content "duplicate";
-//               widget 2's content vanished. Both unique middles must survive.
-//  /true-dup  — two widgets with byte-identical panels: content exports once,
-//               the second location says WHY it is skipped (marker), never
-//               silently.
-//  /toolbar   — copy/theme buttons inside <pre> and a feedback widget are
-//               chrome, not tabs: they must not be discovered as tab groups
-//               and — the live-usage bug — must NOT be clicked (a real theme
-//               toggle persists the reader's site preference).
-//  /oversize  — a panel too large to relocate under its button is left in
-//               place IN FULL rather than exported truncated.
+//  #11 — visible tab-panel content must never be dropped:
+//  /dup-ids       — two widgets reuse the SAME panel ids (devsite does this),
+//                   and their code samples share the first/last 200 chars.
+//                   Pre-fix, aria-controls resolved to widget 1's panel for
+//                   both widgets and the head/tail signature called different
+//                   content "duplicate"; widget 2's content vanished. Both
+//                   unique middles must survive.
+//  /true-dup      — two widgets with byte-identical panels: content exports
+//                   once, the second location says WHY it is skipped (marker),
+//                   never silently.
+//  /toolbar       — copy/theme buttons inside <pre> and a feedback widget are
+//                   chrome, not tabs: they must not be discovered as tab
+//                   groups and — the live-usage bug — must NOT be clicked (a
+//                   real theme toggle persists the reader's site preference).
+//  /oversize      — a panel too large to relocate under its button is left in
+//                   place IN FULL rather than exported truncated.
+//
+//  #12 — ordinary page buttons are not tabs (T96 audit repro):
+//  /actions-in-main — Like/Bookmark and Vietnamese Xóa/Đăng ký live inside
+//                   <main>, outside any tablist/nav/form/pre wrapper. Pre-fix
+//                   the "all elements are <button>" shortcut classified them
+//                   as tab groups and clicked them during extraction. After
+//                   the fix, none is clicked and no [Tab Button: …] marker is
+//                   emitted for them; a genuine ARIA tab widget on the same
+//                   page is still captured.
+//  /legacy-tabs   — an ancient jQuery UI shape: two buttons with no ARIA at
+//                   all, wrapped in a container with class="nav-tabs". The
+//                   safety fix must not drop widgets that declare themselves
+//                   via CSS convention rather than ARIA.
 //
 // Run:  npm i --no-save puppeteer-core
 //       npx wxt build --mode e2e
@@ -161,6 +174,45 @@ line two of the sample</code></pre>
        ).join('')}<p>OVERSIZE_TAIL_MARKER</p></section>
        <section role="tabpanel" id="huge-b" hidden><p>NOTES_PANEL_PAYLOAD</p></section>
      </div>`,
+  ),
+  // Issue #12: ordinary buttons in <main> are NOT tab widgets. The T96 audit
+  // reproduced this on http://127.0.0.1:PORT/actions — same shape below.
+  '/actions-in-main': page(
+    'Ordinary action buttons — not tabs',
+    `${'<p>A public article with useful text for export. No action on this page should be invoked merely to read its content.</p>\n'.repeat(4)}
+     <h2>Action buttons</h2>
+     <div>
+       <button type="button" id="like" onclick="window.__aClicks=(window.__aClicks||{});window.__aClicks.like=(window.__aClicks.like||0)+1">Like</button>
+       <button type="button" id="bookmark" onclick="window.__aClicks=(window.__aClicks||{});window.__aClicks.bookmark=(window.__aClicks.bookmark||0)+1">Bookmark</button>
+     </div>
+     <div>
+       <button type="button" id="deleteVi" onclick="window.__aClicks=(window.__aClicks||{});window.__aClicks.deleteVi=(window.__aClicks.deleteVi||0)+1">Xóa</button>
+       <button type="button" id="subscribeVi" onclick="window.__aClicks=(window.__aClicks||{});window.__aClicks.subscribeVi=(window.__aClicks.subscribeVi||0)+1">Đăng ký</button>
+     </div>
+     <h2>Real ARIA tabs on the same page</h2>
+     ${tabWidget('real', [
+       { label: 'Python', panelId: 'main-py', code: `${HEAD}MAIN_PY_MIDDLE\n${TAIL}` },
+       { label: 'JavaScript', panelId: 'main-js', code: `${HEAD}MAIN_JS_MIDDLE\n${TAIL}` },
+     ])}`,
+  ),
+  // Issue #12 fallback path: an ancient jQuery UI shape with no ARIA but with
+  // class="nav-tabs" on the container. The tightened discovery must still
+  // discover this group via hasTabLikeAncestor.
+  '/legacy-tabs': page(
+    'Legacy tab strip with class="nav-tabs" and no ARIA',
+    `<h2>Ancient jQuery UI shape</h2>
+     <div class="nav-tabs">
+       <button type="button" onclick="switchLegacy('one')">Legacy Home</button>
+       <button type="button" onclick="switchLegacy('two')">Legacy Away</button>
+     </div>
+     <div id="legacy-one"><p>LEGACY_HOME_MIDDLE contents of first legacy pane.</p></div>
+     <div id="legacy-two" hidden><p>LEGACY_AWAY_MIDDLE contents of second legacy pane.</p></div>
+     <script>
+       function switchLegacy(which) {
+         document.getElementById('legacy-one').hidden = which !== 'one';
+         document.getElementById('legacy-two').hidden = which !== 'two';
+       }
+     </script>`,
   ),
 };
 
@@ -321,6 +373,45 @@ try {
     check('oversize: tail of the huge panel survives', count(md, 'OVERSIZE_TAIL_MARKER') === 1);
     check('oversize: huge panel not exported under the button', !/TAB PANEL START: Reference/.test(md));
     check('oversize: sibling normal panel still captured', count(md, 'NOTES_PANEL_PAYLOAD') === 1);
+  }
+
+  // 5. Issue #12: ordinary buttons in <main> are not tab widgets. Reproduces
+  //    the T96 audit fixture where Like/Bookmark/Xóa/Đăng ký were classified
+  //    as tabs and clicked during extraction.
+  {
+    const r = await extract(tab, sw, `${base}/actions-in-main`);
+    const md = r.markdown || '';
+    check('actions-in-main: status ok', r.status === 'ok', `status=${r.status}`);
+    check(
+      'actions-in-main: no [Tab Button: …] marker for any action label',
+      !/\[Tab Button: (Like|Bookmark|Xóa|Đăng ký)\]/.test(md),
+    );
+    check(
+      'actions-in-main: no TAB PANEL START marker for any action label',
+      !/TAB PANEL START: (Like|Bookmark|Xóa|Đăng ký)/.test(md),
+    );
+    const clicks = await tab.evaluate(() => window.__aClicks || {});
+    check(
+      'actions-in-main: no ordinary button was clicked during extraction',
+      !clicks.like && !clicks.bookmark && !clicks.deleteVi && !clicks.subscribeVi,
+      JSON.stringify(clicks),
+    );
+    check(
+      'actions-in-main: real ARIA tabs on the same page still captured',
+      count(md, 'MAIN_PY_MIDDLE') === 1 && count(md, 'MAIN_JS_MIDDLE') === 1,
+    );
+  }
+
+  // 6. Issue #12 fallback path: an ancient tab strip declared only through the
+  //    container's class="nav-tabs". The safety fix must still discover it.
+  {
+    const r = await extract(tab, sw, `${base}/legacy-tabs`);
+    const md = r.markdown || '';
+    check('legacy-tabs: status ok', r.status === 'ok', `status=${r.status}`);
+    check(
+      'legacy-tabs: both legacy pane payloads survive',
+      count(md, 'LEGACY_HOME_MIDDLE') === 1 && count(md, 'LEGACY_AWAY_MIDDLE') === 1,
+    );
   }
 } finally {
   await browser.close().catch(() => {});
