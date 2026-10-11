@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Also POST /publish. Has no effect while the item is in review; only moves an item that has already passed review and is waiting.'
+        description: 'Also submit the uploaded package for review (API V2 :publish). Only for an upload whose submit step failed; it does nothing useful while the item is already in review.'
         type: boolean
         default: false
   schedule:
@@ -85,57 +85,36 @@ jobs:
     timeout-minutes: 5
     needs: live
 
+    # Chrome Web Store API V2 through scripts/cws-v2.sh. API V1, which this job
+    # called until 2026-10, stops answering on 2026-10-15.
     steps:
-      - name: Exchange refresh token and read item status
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read item status (API V2 fetchStatus, read-only)
         env:
-          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          PUBLISH: ${{ inputs.publish }}
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
         run: |
-          set -euo pipefail
-
-          ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
-            -d "client_id=${CLIENT_ID}" \
-            -d "client_secret=${CLIENT_SECRET}" \
-            -d "refresh_token=${REFRESH_TOKEN}" \
-            -d "grant_type=refresh_token" | jq -r '.access_token // empty')
-
-          if [ -z "$ACCESS_TOKEN" ]; then
-            echo "::error::Token exchange returned no access_token. The refresh token is probably revoked or expired."
+          # The secret must name the item this workflow is about. A wrong secret
+          # would make every authenticated answer describe some other extension.
+          if [ "$CWS_ITEM_ID" != "$ITEM_ID" ]; then
+            echo "::error::Secret CHROME_EXTENSION_ID is not ${ITEM_ID}."
             exit 1
           fi
-          echo "Token exchange: OK"
+          bash scripts/cws-v2.sh status
 
-          echo "--- projection=DRAFT ---"
-          # uploadState and crxVersion describe the DRAFT. crxVersion lagging behind
-          # the repo means later uploads never landed. itemError, when present, is the
-          # store's own explanation.
-          curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-               -H "x-goog-api-version: 2" \
-               "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=DRAFT" \
-            | jq 'del(.id, .publicKey)'
-
-          echo "--- projection=PUBLISHED ---"
-          # Expect HTTP 400 "Please append ?projection=DRAFT". Treat that as noise:
-          # this API rejects projection=PUBLISHED for every item, so it says nothing
-          # about whether THIS item is published. On 2026-07-27 it was read as proof
-          # that no published version existed. It is not evidence either way -- the
-          # anonymous job above is. Kept only so the raw response is on the record.
-          curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-               -H "x-goog-api-version: 2" \
-               "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=PUBLISHED" \
-            | jq 'del(.id, .publicKey)'
-
-          if [ "${PUBLISH}" = "true" ]; then
-            echo "--- POST /publish (target: default) ---"
-            # {"status":["OK"]} means the request was accepted, NOT that anything was
-            # published. Confirm with the anonymous job, never with this response.
-            curl -s -X POST \
-                 -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-                 -H "x-goog-api-version: 2" \
-                 -H "Content-Length: 0" \
-                 "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
-              | jq '.'
-          fi
+      - name: Submit the uploaded package for review
+        if: ${{ inputs.publish }}
+        # The reply means the request was accepted, NOT that anything was published.
+        # Confirm with the anonymous job above once review finishes.
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: bash scripts/cws-v2.sh publish
