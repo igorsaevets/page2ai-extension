@@ -6,17 +6,17 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Build zip and create GH release but skip CWS upload'
-        type: boolean
-        default: false
+      reupload_tag:
+        description: 'Empty = read-only preflight: build the zip and check the store credentials, upload nothing. Recovery only: a tag such as v1.4.0 uploads the Chrome zip attached to that GitHub Release and submits it for review.'
+        type: string
+        default: ''
 
 concurrency:
   group: publish-chrome
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 # GitHub's implicit shell for `run:` is `bash -e {0}` -- `-e` is on, `pipefail` is
 # NOT. So `X=$(ls something | head -n 1)` succeeds with X empty when `ls` fails,
@@ -26,11 +26,21 @@ defaults:
   run:
     shell: bash
 
+# Store calls go through scripts/cws-v2.sh: Chrome Web Store API V2 over plain curl,
+# covered in CI by scripts/cws-v2.test.mjs. Until 2026-10 the upload step was the
+# third-party action mnao305/chrome-extension-upload, which held all four store
+# credentials and spoke API V1; Google stops serving V1 on 2026-10-15. If the script
+# ever fails against the live API, the fallback is that action's V2 release v7.0.0
+# (SHA f549d5d654694a7722d6abfa64c97409ad5e64c1), which needs a `publisher-id` input.
+
 jobs:
   publish:
     name: Zip → CWS → GitHub Release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout tagged commit
@@ -45,6 +55,7 @@ jobs:
           cache: npm
 
       - name: Verify tag matches package.json version
+        id: version
         run: |
           TAG_REF="${GITHUB_REF#refs/tags/v}"
           PKG_VERSION=$(node -p "require('./package.json').version")
@@ -54,6 +65,7 @@ jobs:
             echo "::error::Tag v$TAG_REF does not match package.json version $PKG_VERSION"
             exit 1
           fi
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -75,33 +87,25 @@ jobs:
           echo "path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
           echo "Chrome zip: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
 
-      # TODO(2026-10-15): Chrome Web Store API V1 is sunset on 15 Oct 2026.
-      # mnao305/chrome-extension-upload@v6.0.0 still bundles the V1 upstream
-      # (chrome-webstore-upload@^1.0.0). BEFORE the deadline, migrate to either:
-      #   (a) a V2-ready action once mnao305 upgrades to chrome-webstore-upload@^6,
-      #   (b) a direct call to chrome-webstore-upload@^6 (requires new `publisherId`
-      #       input — see HT-11 in .memory/HUMAN_TASKS.md).
-      # Refs: https://github.com/mnao305/chrome-extension-upload
-      #       https://github.com/fregante/chrome-webstore-upload/issues/114
-      - name: Upload to Chrome Web Store
+      - name: Upload to Chrome Web Store and submit for review
         id: cws
-        if: ${{ !inputs.dry_run }}
         # continue-on-error is here so a store rejection does not cost us the GitHub
         # Release. On its own it also HIDES the rejection: GitHub records
         # conclusion=success for a step that failed, which is why v1.2.0 looked
         # published for four days while the API had answered ITEM_NOT_UPDATABLE.
         # The gate below turns the real outcome back into a red run.
         continue-on-error: true
-        # SHA-pinned to v6.0.0 (2026-03-31). Update pin when bumping tag.
-        uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4
-        with:
-          file-path: ${{ steps.zip.outputs.path }}
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          publish: true
-          publish-target: default
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          ZIP_PATH: ${{ steps.zip.outputs.path }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bash scripts/cws-v2.sh upload "$ZIP_PATH" "$VERSION"
+          bash scripts/cws-v2.sh publish
 
       - name: Create GitHub Release
         # SHA-pinned to v3.0.2 (2026-07-13). Runtime bumped to Node 24 — matches our setup.
@@ -110,13 +114,123 @@ jobs:
           files: ${{ steps.zip.outputs.path }}
           generate_release_notes: true
           body: |
-            Chrome extension zip is attached to this release and has been submitted to the Chrome Web Store.
+            Chrome extension zip is attached to this release. ${{ steps.cws.outcome == 'success' && 'It has been submitted to the Chrome Web Store for review.' || 'Its Chrome Web Store submission FAILED; see the workflow run.' }}
 
             See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
           fail_on_unmatched_files: true
 
+      - name: Record the store state after the submit
+        if: ${{ always() && steps.cws.outcome != 'skipped' }}
+        continue-on-error: true
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: bash scripts/cws-v2.sh status
+
       - name: Fail the run if the store rejected the upload
-        if: ${{ !inputs.dry_run && steps.cws.outcome == 'failure' }}
+        if: ${{ steps.cws.outcome == 'failure' }}
         run: |
-          echo "::error::The Chrome Web Store upload failed. The GitHub Release was still created, but the store copy did NOT advance. Read the 'Upload to Chrome Web Store' step log for the error_code, then run the 'Chrome Web Store status' workflow to see the item state."
+          echo "::error::The Chrome Web Store upload or submit failed. The GitHub Release was still created, but the store copy did NOT advance. Read Google's error in the 'Upload to Chrome Web Store' step, fix the cause, then run this workflow by hand with reupload_tag set to this tag."
           exit 1
+
+  preflight:
+    name: Preflight (read-only, uploads nothing)
+    if: github.event_name == 'workflow_dispatch' && inputs.reupload_tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Zip Chrome extension
+        run: npx wxt zip -b chrome
+
+      - name: Show what a release would upload
+        run: |
+          shopt -s nullglob
+          ZIPS=(.output/*-chrome.zip)
+          if [ "${#ZIPS[@]}" -ne 1 ]; then
+            echo "::error::Expected one Chrome zip under .output/, found ${#ZIPS[@]}"
+            exit 1
+          fi
+          echo "Chrome zip: ${ZIPS[0]} ($(du -h "${ZIPS[0]}" | cut -f1)), manifest version $(unzip -p "${ZIPS[0]}" manifest.json | jq -r .version)"
+
+      - name: Check store credentials and publisher ID (API V2 fetchStatus)
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: bash scripts/cws-v2.sh status
+
+  reupload:
+    name: Re-upload a released zip
+    if: github.event_name == 'workflow_dispatch' && inputs.reupload_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout (for scripts/cws-v2.sh)
+        uses: actions/checkout@v7
+
+      - name: Download the Chrome zip attached to the release
+        id: zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.reupload_tag }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::reupload_tag must look like v1.4.0"
+            exit 1
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-chrome.zip' --dir release-zip
+          shopt -s nullglob
+          ZIPS=(release-zip/*-chrome.zip)
+          if [ "${#ZIPS[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one *-chrome.zip on release $TAG, found ${#ZIPS[@]}"
+            exit 1
+          fi
+          VERSION=$(unzip -p "${ZIPS[0]}" manifest.json | jq -r .version)
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::The zip on release $TAG carries manifest version $VERSION"
+            exit 1
+          fi
+          echo "path=${ZIPS[0]}" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Chrome Web Store and submit for review
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          ZIP_PATH: ${{ steps.zip.outputs.path }}
+          VERSION: ${{ steps.zip.outputs.version }}
+        run: |
+          bash scripts/cws-v2.sh upload "$ZIP_PATH" "$VERSION"
+          bash scripts/cws-v2.sh publish
+
+      - name: Record the store state after the submit
+        if: ${{ always() && steps.zip.outcome == 'success' }}
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: bash scripts/cws-v2.sh status
