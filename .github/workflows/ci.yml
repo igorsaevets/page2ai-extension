@@ -105,3 +105,27 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-tab-panels.mjs
+
+  cws-client:
+    name: Chrome Web Store client (mock API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    # The release path runs for real only when a tag is cut, so it is tested here
+    # on every push: a loopback server plays Google's token endpoint and the API V2
+    # methods. No credentials, no network.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # shellcheck ships on GitHub's Ubuntu runner image.
+      - name: Lint the store client
+        run: shellcheck scripts/cws-v2.sh
+
+      - name: Mock-API suite
+        run: node scripts/cws-v2.test.mjs
