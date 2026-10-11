@@ -177,6 +177,7 @@ await scenario('status in Actions', {}, ['status'],
     check('status in Actions: token masked first', out.split('\n').some((l) => l === `::add-mask::${CRED.access}`), out);
     const md = readFileSync(summaryFile, 'utf8');
     check('status in Actions: step summary written', md.includes('- Published revision: PUBLISHED 1.3.0 at 100%'), md);
+    check('status in Actions: every summary line is a bullet', md.includes('\n- Submitted revision: none\n- Last upload in 24 h: none\n'), md);
   });
 
 await scenario('status wrong publisher', { status: [gerr(403, 'PERMISSION_DENIED',

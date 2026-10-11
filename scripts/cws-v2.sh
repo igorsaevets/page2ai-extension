@@ -130,7 +130,7 @@ cmd_status() {
     "Last upload in 24 h: \(.lastAsyncUploadState // "none")",
     "Taken down: \(.takenDown // false); warned: \(.warned // false)"' "$BODY")
   echo "$report"
-  summary "### Chrome Web Store API V2 status" "" "$(sed 's/^/- /' <<<"$report")" ""
+  summary "### Chrome Web Store API V2 status" "" "- ${report//$'\n'/$'\n'- }" ""
   if [ "$(jqr '.takenDown // false' "$BODY")" = true ]; then
     die "The store reports this item as TAKEN DOWN for a policy violation."
   fi
