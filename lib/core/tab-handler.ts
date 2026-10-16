@@ -21,7 +21,6 @@ import {
   isMarkedSelected,
   isNonTabWidgetControl,
   isProbablyUnsafeTabButton,
-  isSelectionToken,
   isSkippable,
   isVisible,
   queryAllDeep,
@@ -145,6 +144,12 @@ const STRONG_TAB_CONTAINER_TOKENS = new Set([
 // the web); `tabs` also wraps whole widgets and layouts. Each counts only
 // beside a second signal.
 const WEAK_TAB_CONTAINER_TOKENS = new Set(['tab', 'tabs']);
+// `tab`/`tabs` as one segment of a longer name (Sentry docs: `code-tabs-wrapper`)
+// is a weak container too, unless a panel segment says it holds the panels.
+const isTabContainerToken = (t: string): boolean =>
+  STRONG_TAB_CONTAINER_TOKENS.has(t) ||
+  WEAK_TAB_CONTAINER_TOKENS.has(t) ||
+  (/(?:^|[-_])tabs?(?:$|[-_])/.test(t) && !/(?:^|[-_])(?:panes?|panels?|contents?|body)(?:$|[-_])/.test(t));
 // Tab PANELS. Whole tokens: the old /\btab\b/ also matched tab-pane and
 // tab-content and took a panel's own buttons for a tab strip (D2).
 const TAB_PANEL_TOKENS = new Set([
@@ -186,7 +191,7 @@ const readTabContainer = (p: Element): TabContainerEvidence => {
       toks.some((t) => STRONG_TAB_CONTAINER_TOKENS.has(t))
     ) {
       ev.strong = true;
-    } else if (toks.some((t) => WEAK_TAB_CONTAINER_TOKENS.has(t))) {
+    } else if (toks.some(isTabContainerToken)) {
       ev.weak = true;
     }
     n = n.parentElement;
@@ -202,12 +207,7 @@ const isInsideTabPanel = (p: Element): boolean => {
   for (let i = 0; i < 40 && n && n !== document.body; i++) {
     const role = (n.getAttribute('role') || '').toLowerCase();
     const toks = classTokens(n);
-    if (
-      role === 'tablist' ||
-      toks.some((t) => STRONG_TAB_CONTAINER_TOKENS.has(t) || WEAK_TAB_CONTAINER_TOKENS.has(t))
-    ) {
-      return false;
-    }
+    if (role === 'tablist' || toks.some(isTabContainerToken)) return false;
     if (role === 'tabpanel' || toks.some((t) => TAB_PANEL_TOKENS.has(t))) return true;
     n = composedParent(n);
   }
@@ -235,9 +235,8 @@ export const isTabLikeGroup = (bs: HTMLElement[], p: Element): boolean => {
   });
   if (distinctCount(targets) >= 2) identity++;
   if (bs.some((b) => /^(?:active|inactive)$/.test(b.getAttribute('data-state') || ''))) identity++;
-  let selection = 0;
-  if (bs.filter((b) => b.hasAttribute('aria-selected')).length >= 2) selection++;
-  if (bs.filter((b) => classTokens(b).some(isSelectionToken)).length === 1) selection++;
+  const selection =
+    bs.filter((b) => b.hasAttribute('aria-selected')).length >= 2 || bs.filter(isMarkedSelected).length === 1 ? 1 : 0;
   return identity >= 1 && identity + selection >= 2;
 };
 

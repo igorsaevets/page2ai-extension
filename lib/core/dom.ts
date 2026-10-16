@@ -397,6 +397,7 @@ export const isSelectionToken = (t: string): boolean =>
 export const isMarkedSelected = (el: Element): boolean =>
   el.getAttribute('aria-selected') === 'true' ||
   el.getAttribute('data-state') === 'active' ||
+  el.getAttribute('data-active') === 'true' ||
   (el.hasAttribute('data-selected') && el.getAttribute('data-selected') !== 'false') ||
   classTokens(el).some(isSelectionToken);
 
