@@ -132,12 +132,33 @@ export const DEFAULTS: ExtractorConfig = {
     /checkout/i, /pay/i, /delete/i, /remove/i, /accept/i, /reject/i, /confirm/i,
     /cancel/i, /\bsave\b/i, /update/i, /cookie/i, /open\s*menu/i, /close/i,
     /удали/i, /удалить/i, /удалит/i, /оплат/i, /купи/i, /купить/i, /заказ/i,
-    /заказать/i, /подпис/i, /отписат/i, /войти/i, /выйти/i, /\bлогин\b/i,
+    /заказать/i, /подпис/i, /отписат/i, /войти/i, /выйти/i,
+    // JS \b is ASCII-only: /\bлогин\b/ never matched a Cyrillic label.
+    /(?<![\p{L}\p{N}])логин(?![\p{L}\p{N}])/iu,
     /регистрац/i, /зарегистр/i, /отправ/i, /отмен/i, /подтвер/i, /сохран/i,
     /закрыть/i, /добавить/i, /создать/i, /начать/i, /продолжит/i, /приня/i,
     /отклон/i, /контакт/i,
     /прыняць/i, /выдалі/i, /закрыц/i, /купіц/i, /заплац/i, /адправ/i,
     /надісла/i, /видали/i, /зареєстру/i, /закри/i, /сплат/i, /придба/i,
+    // BL-19 D5: action labels in 13 more languages, a second line behind the structural refusals. Each word is
+    // a translation read 2026-10-16 in WordPress core (translate.wordpress.org wp/dev export: Delete, Remove,
+    // Submit, Cancel, Save, Log In, Log Out) or Ant Design components/locale/*.ts (cancelText, okText, remove).
+    // Latin scripts: a whole word anywhere in the label. Vietnamese, CJK and Arabic: the WHOLE label only,
+    // because there the word also opens ordinary titles (VI «Lưu ý» is "Note", ZH «登录日志» a login log).
+    // Left out: ES «Registro», ID «Daftar», FR «Inscription», AR «تسجيل» alone (also record, list, recording).
+    /(?<![\p{L}\p{N}])(?:borrar|eliminar|enviar|cancelar|guardar|acceder|salir|aceptar)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:excluir|remover|salvar|acessar|cadastre-se|sair)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:supprimer|retirer|envoyer|annuler|enregistrer|se connecter|se déconnecter)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:löschen|entfernen|absenden|abbrechen|speichern|anmelden|registrieren|abmelden)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:elimina|rimuovi|invia|annulla|salva|accedi|registrati|esci)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:usuń|wyślij|anuluj|zapisz|zaloguj się|zarejestruj się|wyloguj się)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:sil|kaldır|gönder|vazgeç|iptal|İptal|kaydet|oturum aç|hesap aç|çıkış yap|tamam)(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])(?:hapus|singkirkan|kirim|batal|simpan|log masuk|log keluar)(?![\p{L}\p{N}])/iu,
+    /^(?:xóa|xóa bỏ|gửi|hủy|lưu|lưu thay đổi|đăng nhập|đăng ký|đăng xuất|đồng ý|gỡ bỏ)$/iu,
+    /^(?:删除|移除|提交|取消|保存|登录|注册|注销|确定|削除|送信|キャンセル|ログイン|登録|ログアウト)$/u,
+    /^(?:삭제|제거|제출|취소|저장|로그인|회원가입|로그아웃|확인)$/u,
+    /^(?:حذف|إزالة|إرسال|إلغاء|حفظ|دخول|تسجيل الخروج|تأكيد)$/u,
+    /^ok$/i,
   ],
   skipSelectors: [
     'script', 'style', 'noscript', 'template', 'svg', 'canvas',

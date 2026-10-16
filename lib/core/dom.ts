@@ -349,6 +349,13 @@ export const isDropdownButton = (btn: Node | null | undefined): boolean => {
   return h === 'menu' || h === 'listbox' || h === 'dialog' || r === 'combobox';
 };
 
+// The aggressive profile clicks dropdown triggers to read their panels. A
+// `aria-haspopup="dialog"` trigger opens a dialog (Share, Report, a Delete
+// confirmation), not a menu, so it is rendered as a dropdown marker but never
+// clicked (BL-24, D10).
+export const isClickableDropdownTrigger = (btn: Node | null | undefined): boolean =>
+  isDropdownButton(btn) && (btn as Element).getAttribute('aria-haspopup') !== 'dialog';
+
 export const isNavigationLikeButton = (btn: Node | null | undefined): boolean => {
   if (!btn || btn.nodeType !== Node.ELEMENT_NODE) return true;
   const element = btn as Element;
@@ -372,12 +379,98 @@ export const isNavigationLikeButton = (btn: Node | null | undefined): boolean =>
   return /^\/|https?:\/\//i.test(hl);
 };
 
+// --- Tab-click safety vocabulary (BL-19 round 2) ---
+
+// Lowercased class tokens. classList also works on SVG elements, where
+// className is an SVGAnimatedString and a regex over it matches nothing.
+export const classTokens = (el: Element): string[] =>
+  [...(el.classList || [])].map((t) => t.toLowerCase());
+
+// A token that marks the selected member of a set (`active`, `is-selected`,
+// `tab--active`, `ui-tabs-active`, `Mui-selected`). Whole tokens only: the old
+// substring test also matched `inactive`, `interactive` and `btn-primary`.
+export const isSelectionToken = (t: string): boolean =>
+  /^(?:is-|has-)?(?:active|selected|current)$/.test(t) ||
+  (/[-_](?:active|selected|current)$/.test(t) && !/^(?:non|not|un|in)[-_]/.test(t)) ||
+  /^(?:active|selected|current)[-_]/.test(t);
+
+export const isMarkedSelected = (el: Element): boolean =>
+  el.getAttribute('aria-selected') === 'true' ||
+  el.getAttribute('data-state') === 'active' ||
+  (el.hasAttribute('data-selected') && el.getAttribute('data-selected') !== 'false') ||
+  classTokens(el).some(isSelectionToken);
+
+// Parent in the composed tree: across a shadow root to its host.
+export const composedParent = (el: Element): Element | null => {
+  if (el.parentElement) return el.parentElement;
+  const r = el.getRootNode();
+  // nodeType, not instanceof: a node from another frame has another realm's ShadowRoot.
+  return r.nodeType === Node.DOCUMENT_FRAGMENT_NODE && 'host' in r ? (r as ShadowRoot).host : null;
+};
+
+const NON_TAB_ROLES = new Set([
+  'radio', 'checkbox', 'switch', 'menuitem', 'menuitemradio', 'menuitemcheckbox',
+  'option', 'slider', 'spinbutton', 'treeitem', 'gridcell', 'link',
+]);
+const TOGGLE_DATA_STATES = new Set(['on', 'off', 'checked', 'unchecked', 'indeterminate']);
+
+// A control that belongs to another widget type: a toggle button, a radio or
+// checkbox (Radix ToggleGroup items are role=radio or aria-pressed with
+// data-state on/off), a menu item, a pagination or stepper item, a carousel
+// slide picker. ARIA tabs say "selected" with aria-selected, never with these.
+// One such button makes its whole sibling group a non-tab widget.
+export const isNonTabWidgetControl = (el: Element): boolean => {
+  if (NON_TAB_ROLES.has((el.getAttribute('role') || '').toLowerCase())) return true;
+  if (el.hasAttribute('aria-pressed')) return true;
+  if (TOGGLE_DATA_STATES.has((el.getAttribute('data-state') || '').toLowerCase())) return true;
+  const cur = (el.getAttribute('aria-current') || '').toLowerCase();
+  if (cur === 'page' || cur === 'step') return true;
+  return ['data-bs-slide-to', 'data-slide-to', 'data-bs-slide', 'data-slide'].some((a) => el.hasAttribute(a));
+};
+
+// A click on these opens or invokes something instead of switching a panel:
+// disclosure, accordion, collapse and popover triggers (aria-expanded or
+// data-state open/closed on anything but a tab), HTML invoker buttons
+// (command/commandfor: show-modal, close, toggle-popover; popovertarget), and
+// a button with a form OWNER — an ancestor <form> or the one form="id" names
+// anywhere in the document; the IDL `form` sees both (D8).
+export const isActionInvoker = (el: Element): boolean => {
+  const isTab = (el.getAttribute('role') || '').toLowerCase() === 'tab';
+  if (!isTab && el.hasAttribute('aria-expanded')) return true;
+  const ds = (el.getAttribute('data-state') || '').toLowerCase();
+  if (!isTab && (ds === 'open' || ds === 'closed' || ds === 'expanded' || ds === 'collapsed')) return true;
+  if (['command', 'commandfor', 'popovertarget', 'popovertargetaction'].some((a) => el.hasAttribute(a))) {
+    return true;
+  }
+  return el.tagName === 'BUTTON' && (el as HTMLButtonElement).form != null;
+};
+
+const CAROUSEL_TOKEN =
+  /^(?:carousel|carousel-indicators|slider|slideshow|slides|swiper|slick|splide|glide|embla|flickity|owl-carousel|owl-dots)(?:$|[-_])/;
+const DIALOG_FOOTER_TOKEN = /(?:modal|dialog)[-_]{0,2}(?:footer|actions)(?:$|[-_])/;
+
+// Containers no tab strip lives in: a carousel (APG and Splide give slide
+// pickers role=tablist/tab, and a slide change looks like a revealed panel),
+// a dialog footer or an alert dialog (Cancel/Save in any language).
+export const isInsideNonTabWidget = (el: Element): boolean => {
+  let n: Element | null = el;
+  for (let i = 0; i < 12 && n; i++) {
+    if (/carousel|slide/i.test(n.getAttribute('aria-roledescription') || '')) return true;
+    if ((n.getAttribute('role') || '').toLowerCase() === 'alertdialog') return true;
+    const toks = classTokens(n);
+    if (toks.some((t) => CAROUSEL_TOKEN.test(t) || DIALOG_FOOTER_TOKEN.test(t))) return true;
+    if (n.tagName === 'FOOTER' && n.closest('dialog, [role="dialog"], [aria-modal="true"]')) return true;
+    n = composedParent(n);
+  }
+  return false;
+};
+
 // Safety check uses isDiscoverablyVisible (off-viewport tabs are valid).
 export const isProbablyUnsafeTabButton = (
   btn: Element,
   config: Pick<ResolvedConfig, 'unsafeTabButtonTextPatterns'>,
 ): boolean => {
-  const t = getButtonText(btn);
+  const t = getButtonText(btn).normalize('NFC');
   const tp = cleanInline(btn.getAttribute('type') || '').toLowerCase();
   if (tp === 'submit' || tp === 'reset') return true;
   if ((btn as HTMLButtonElement).disabled || btn.getAttribute('aria-disabled') === 'true') {
@@ -386,6 +479,7 @@ export const isProbablyUnsafeTabButton = (
   if (btn.closest('form') || isNavigationLikeButton(btn) || !isDiscoverablyVisible(btn)) {
     return true;
   }
+  if (isActionInvoker(btn) || isNonTabWidgetControl(btn) || isInsideNonTabWidget(btn)) return true;
   // Code-toolbar chrome (theme toggle, copy) and page-feedback widgets are
   // never content tabs. Text patterns cannot catch these: devsite localizes
   // the labels («Тёмная тема кода»), so the check is structural. Clicking a
@@ -585,10 +679,4 @@ export const clickAndWait = async (
   btn.click();
   await w;
   await sleep(80);
-};
-
-export const pressEscape = (): void => {
-  const o = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true };
-  document.dispatchEvent(new KeyboardEvent('keydown', o));
-  document.dispatchEvent(new KeyboardEvent('keyup', o));
 };
