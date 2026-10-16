@@ -4,22 +4,29 @@
 
 import { cleanBlock, sleep, withHardTimeout } from './utils';
 import {
+  classTokens,
   clickAndWait,
+  composedParent,
+  ensureElementInViewport,
   getButtonFallbackLabel,
   getButtonText,
   getNearestHeadingText,
   getPrimaryContentRoot,
   getVisibleText,
   isClickablyVisible,
+  isClickableDropdownTrigger,
   isDiscoverablyVisible,
-  isDropdownButton,
   isInsideDangerousNavigationArea,
+  isInsideNonTabWidget,
+  isMarkedSelected,
+  isNonTabWidgetControl,
   isProbablyUnsafeTabButton,
+  isSelectionToken,
   isSkippable,
   isVisible,
-  pressEscape,
   queryAllDeep,
   resetComputedStyleCache,
+  waitForDomToSettle,
 } from './dom';
 import { renderNode } from './html-to-md';
 import { normalizeMarkdownPreserveCode } from './md-postprocess';
@@ -88,57 +95,150 @@ export const getAllPotentialButtons = (
   }) as HTMLElement[];
 };
 
-export const getTabGroupButtons = (c: Element, config: ResolvedConfig): HTMLElement[] =>
-  [...c.querySelectorAll<HTMLElement>('button, [role="tab"]')].filter((b) => {
-    const t = getButtonText(b);
-    return (
-      Boolean(t) &&
-      t.length >= config.minTabButtonTextLength &&
-      t.length <= config.maxTabButtonTextLength &&
-      isDiscoverablyVisible(b) &&
-      !isProbablyUnsafeTabButton(b, config)
-    );
-  });
+// --- Tab classification (BL-19 round 2) ---
+// A group is clicked only on POSITIVE evidence that it is a tab strip: a wrong
+// click changes the reader's page (formatting toggled, a choice changed, a
+// popover opened, a form sent), a missed tab costs hidden text in the export.
+// Every rule below prefers the miss.
 
-export const hasTabLikeAttributes = (bs: HTMLElement[]): boolean =>
-  bs.some(
-    (b) =>
-      b.getAttribute('role') === 'tab' ||
-      b.hasAttribute('aria-selected') ||
-      b.hasAttribute('aria-controls') ||
-      b.hasAttribute('data-state') ||
-      b.hasAttribute('data-tab') ||
-      /active|selected|current|primary|bg-primary/i.test(b.className || ''),
+const TAB_TOGGLES = new Set(['tab', 'pill']);
+
+// Declares itself a tab: role=tab, or Bootstrap data-bs-toggle / data-toggle =
+// tab | pill. A bare `nav-pills` class does not: Bootstrap styles link bars
+// with it too.
+export const isExplicitTab = (b: Element): boolean =>
+  (b.getAttribute('role') || '').toLowerCase() === 'tab' ||
+  TAB_TOGGLES.has((b.getAttribute('data-bs-toggle') || b.getAttribute('data-toggle') || '').toLowerCase());
+
+// Path 1: inside a role=tablist only its declared tabs are candidates. The
+// close (×), add (+) and scroll buttons of closable or scrollable strips sit in
+// the same tablist and are never clicked (D7); fewer than two declared tabs
+// means no group.
+export const getTabGroupButtons = (c: Element, config: ResolvedConfig): HTMLElement[] =>
+  [...c.querySelectorAll<HTMLElement>('[role="tab"], button[data-bs-toggle], button[data-toggle]')].filter(
+    (b) => {
+      const t = getButtonText(b);
+      return (
+        isExplicitTab(b) &&
+        Boolean(t) &&
+        t.length >= config.minTabButtonTextLength &&
+        t.length <= config.maxTabButtonTextLength &&
+        isDiscoverablyVisible(b) &&
+        !isProbablyUnsafeTabButton(b, config)
+      );
+    },
   );
 
-// A pure `<button type="button">` (the HTML default) sitting in a `<div>` is
-// not a tab widget on its own — it is the most common ordinary button in the
-// DOM. Before we click it as if it switched content, require a POSITIVE
-// signal on the group's container: an ARIA/Radix marker, or a legacy
-// CSS convention name for a tab strip. When both this and hasTabLikeAttributes
-// fail, the group is ambiguous and we skip it. Bug #12: real extension on a
-// Vietnamese fixture clicked Like/Bookmark/Xóa/Đăng ký because the old
-// fallback accepted any pair of default-type buttons.
-export const hasTabLikeAncestor = (el: Element | null): boolean => {
-  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-  // Walk up at most two levels — real tab widgets wrap the button strip in
-  // one container plus optionally the widget root; further and we start
-  // matching unrelated ancestors (e.g. a page-wide `.tabs-container` layout).
-  let node: Element | null = el;
-  for (let i = 0; i < 3 && node; i++) {
-    if (node.getAttribute('role') === 'tablist') return true;
+// Slide pickers marked up as a tablist (APG carousel, Splide): a slide change
+// would read as a revealed panel.
+const isCarouselTablist = (tl: Element): boolean =>
+  /\bslides?\b|carousel/i.test(tl.getAttribute('aria-label') || '') ||
+  [...tl.querySelectorAll('[role="tab"]')].filter((t) => /^(?:go to )?slide\s*\d+/i.test(getButtonText(t)))
+    .length >= 2;
+
+// Container class tokens that name a tab STRIP on their own.
+const STRONG_TAB_CONTAINER_TOKENS = new Set([
+  'tablist', 'tab-list', 'tabs-list', 'tab-nav', 'tabs-nav', 'tab-bar', 'tabs-bar', 'tab-strip',
+  'tab-menu', 'tabs-menu', 'tab-buttons', 'tab-links', 'tab-header', 'tab-headers', 'tabs-header', 'nav-tabs',
+]);
+// Generic names, kept for W3Schools' `div.tab > button.tablinks` (copied across
+// the web); `tabs` also wraps whole widgets and layouts. Each counts only
+// beside a second signal.
+const WEAK_TAB_CONTAINER_TOKENS = new Set(['tab', 'tabs']);
+// Tab PANELS. Whole tokens: the old /\btab\b/ also matched tab-pane and
+// tab-content and took a panel's own buttons for a tab strip (D2).
+const TAB_PANEL_TOKENS = new Set([
+  'tab-pane', 'tab-panel', 'tabpanel', 'tab-content', 'tab-body', 'tabcontent', 'tabs-panel', 'tabs-content',
+  'tab-panes',
+]);
+// Containers of other button widgets: toolbars, toggle and radio groups (Radix
+// ToggleGroup is role=group, D1), menus, Bootstrap button groups, pagination,
+// steppers, segmented controls, filter chips, ratings.
+const NON_TAB_GROUP_ROLES = new Set(['toolbar', 'radiogroup', 'group', 'menubar', 'menu', 'listbox', 'tree', 'grid']);
+const NON_TAB_GROUP_TOKEN =
+  /^(?:btn-group|btn-toolbar|button-group|toggle-group|segmented|segmented-control|pagination|pager|stepper|steps|wizard|chips|chip-group|chip-list|filter-group|filters|facets|rating|stars)$/;
+// A button's own class naming it a tab trigger: W3Schools `tablinks`,
+// `tab-btn`, `tabs__item`, jQuery UI `ui-tabs-tab`.
+const isTabButtonToken = (t: string): boolean =>
+  /^(?:tab|tablinks?|tab-?(?:link|btn|button|item|trigger|title|label|handle))$/.test(t) ||
+  /^tabs?[-_]{1,2}(?:tab|item|link|btn|button|trigger)$/.test(t) ||
+  /[-_]tab$/.test(t);
+
+interface TabContainerEvidence {
+  strong: boolean;
+  weak: boolean;
+  nonTabGroup: boolean;
+}
+
+// Parent, grandparent, great-grandparent: a strip wraps its buttons in one
+// container plus at most the widget root; further up are unrelated layouts.
+const readTabContainer = (p: Element): TabContainerEvidence => {
+  const ev: TabContainerEvidence = { strong: false, weak: false, nonTabGroup: false };
+  let n: Element | null = p;
+  for (let i = 0; i < 3 && n; i++) {
+    const role = (n.getAttribute('role') || '').toLowerCase();
+    const toks = classTokens(n);
+    if (NON_TAB_GROUP_ROLES.has(role) || toks.some((t) => NON_TAB_GROUP_TOKEN.test(t))) ev.nonTabGroup = true;
     if (
-      node.hasAttribute('data-tabs') ||
-      node.hasAttribute('data-tablist') ||
-      node.hasAttribute('data-orientation')
+      role === 'tablist' ||
+      n.hasAttribute('data-tabs') ||
+      n.hasAttribute('data-tablist') ||
+      toks.some((t) => STRONG_TAB_CONTAINER_TOKENS.has(t))
     ) {
-      return true;
+      ev.strong = true;
+    } else if (toks.some((t) => WEAK_TAB_CONTAINER_TOKENS.has(t))) {
+      ev.weak = true;
     }
-    const cls = typeof node.className === 'string' ? node.className : '';
-    if (/\b(tabs?|tablist|tab-nav|tab-bar|tab-list|nav-tabs)\b/i.test(cls)) return true;
-    node = node.parentElement;
+    n = n.parentElement;
+  }
+  return ev;
+};
+
+// Walking up from the group, a tab PANEL met before any strip marker means the
+// buttons are that panel's content (Yes/No, Copy, an editor toolbar), D2. A
+// nested strip names itself first, so inner tabs inside an outer panel pass.
+const isInsideTabPanel = (p: Element): boolean => {
+  let n: Element | null = p;
+  for (let i = 0; i < 40 && n && n !== document.body; i++) {
+    const role = (n.getAttribute('role') || '').toLowerCase();
+    const toks = classTokens(n);
+    if (
+      role === 'tablist' ||
+      toks.some((t) => STRONG_TAB_CONTAINER_TOKENS.has(t) || WEAK_TAB_CONTAINER_TOKENS.has(t))
+    ) {
+      return false;
+    }
+    if (role === 'tabpanel' || toks.some((t) => TAB_PANEL_TOKENS.has(t))) return true;
+    n = composedParent(n);
   }
   return false;
+};
+
+const distinctCount = (vals: Array<string | null>): number => new Set(vals.filter(Boolean)).size;
+
+// Path 2 decision. A declared tab qualifies alone. Otherwise two points, at
+// least one of which names a TAB (a container token, a tab class on every
+// button, distinct data-tab values, aria-controls naming two distinct existing
+// elements, data-state active|inactive) rather than only a selection
+// (aria-selected on 2+, exactly one `.active`): segmented controls, pagination,
+// filter chips and rating stars mark one item selected too (D3). `primary` and
+// `bg-primary` are no signal at all: a dialog's Save button is btn-primary.
+export const isTabLikeGroup = (bs: HTMLElement[], p: Element): boolean => {
+  if (bs.some(isExplicitTab)) return true;
+  const c = readTabContainer(p);
+  let identity = c.strong ? 2 : c.weak ? 1 : 0;
+  if (bs.every((b) => classTokens(b).some(isTabButtonToken))) identity++;
+  if (distinctCount(bs.map((b) => b.getAttribute('data-tab'))) >= 2) identity++;
+  const targets = bs.map((b) => {
+    const id = (b.getAttribute('aria-controls') || '').trim().split(/\s+/)[0];
+    return id && document.getElementById(id) ? id : null;
+  });
+  if (distinctCount(targets) >= 2) identity++;
+  if (bs.some((b) => /^(?:active|inactive)$/.test(b.getAttribute('data-state') || ''))) identity++;
+  let selection = 0;
+  if (bs.filter((b) => b.hasAttribute('aria-selected')).length >= 2) selection++;
+  if (bs.filter((b) => classTokens(b).some(isSelectionToken)).length === 1) selection++;
+  return identity >= 1 && identity + selection >= 2;
 };
 
 // Discovers every real tab/code group, even when labels repeat. Mintlify reuses
@@ -163,12 +263,15 @@ export const discoverTabGroups = (ctx: ExtractContext): TabGroup[] => {
     groups.push({ container: c, buttons: safe, reason, signature: sig });
   };
   root.querySelectorAll('[role="tablist"]').forEach((tl) => {
-    if (isInsideDangerousNavigationArea(tl)) return;
+    if (isInsideDangerousNavigationArea(tl) || isInsideNonTabWidget(tl) || isCarouselTablist(tl)) return;
     push(tl, getTabGroupButtons(tl, config), 'role=tablist');
   });
   const cands = getAllPotentialButtons(root, config).filter(
     (b) =>
       !used.has(b) &&
+      // A tablist's members are Path 1's to judge; what it left are close, add
+      // and scroll controls (D7).
+      !b.closest('[role="tablist"]') &&
       getButtonText(b) &&
       isDiscoverablyVisible(b) &&
       !isProbablyUnsafeTabButton(b, config),
@@ -186,13 +289,12 @@ export const discoverTabGroups = (ctx: ExtractContext): TabGroup[] => {
       return t.length >= config.minTabButtonTextLength && t.length <= config.maxTabButtonTextLength;
     });
     if (fb.length < 2) return;
-    // #12: a same-parent button group is a tab widget only when there is
-    // POSITIVE evidence — either a per-button ARIA/framework signal or a
-    // container class the wider ecosystem uses for tab strips (Bootstrap,
-    // jQuery UI, WordPress themes). The old "all elements are buttons"
-    // shortcut accepted every pair of default `<button type="button">`
-    // siblings and clicked them as tabs.
-    if (!hasTabLikeAttributes(fb) && !hasTabLikeAncestor(p)) return;
+    // One toggle, radio, menu item, stepper or slide picker among the siblings
+    // makes the whole row that widget, its unmarked buttons included.
+    if ([...p.children].some((s) => s.matches('button, [role="tab"]') && isNonTabWidgetControl(s))) return;
+    // #12 and T99: a same-parent group is clicked only on positive evidence.
+    if (!fb.some(isExplicitTab) && (readTabContainer(p).nonTabGroup || isInsideTabPanel(p))) return;
+    if (!isTabLikeGroup(fb, p)) return;
     push(p, fb, 'same-parent-buttons');
   });
   return groups.slice(0, config.maxTabGroups);
@@ -243,33 +345,37 @@ export const getTextFromCloneExcludingGroup = (r: Element, gc: Element): string 
 // Enhanced findControlledPanel for Radix/shadcn tabs.
 // Level 1: aria-controls → getElementById → data-state or isVisible.
 // Level 2: sibling search near tablist — NO isVisible gate on data-state path.
-export const findControlledPanel = (btn: Element): Element | null => {
+// The element a button's aria-controls names, visible or not.
+export const resolveControlsTarget = (btn: Element): Element | null => {
   const controls = btn.getAttribute('aria-controls');
-  if (controls) {
-    // Resolve the id NEAR the button before the document-wide lookup.
-    // Real pages repeat panel ids across widgets (devsite gives EVERY group
-    // id="tabpanel-python"), and getElementById always returns the first
-    // match — so every group after the first captured group 1's panel and
-    // its own content was lost as a "duplicate" (#11).
-    const eid = window.CSS && CSS.escape ? CSS.escape(controls) : controls.replace(/"/g, '\\"');
-    let scoped: Element | null = null;
-    let scope: Element | null = btn.parentElement;
-    for (let i = 0; i < 5 && scope && !scoped; i++) {
-      // A malformed id can make the selector throw; that must degrade to the
-      // document fallback, not kill the tab phase (panel review, T79).
-      try {
-        scoped = scope.querySelector(`[id="${eid}"]`);
-      } catch {
-        break;
-      }
-      scope = scope.parentElement;
+  if (!controls) return null;
+  // Resolve the id NEAR the button before the document-wide lookup.
+  // Real pages repeat panel ids across widgets (devsite gives EVERY group
+  // id="tabpanel-python"), and getElementById always returns the first
+  // match — so every group after the first captured group 1's panel and
+  // its own content was lost as a "duplicate" (#11).
+  const eid = window.CSS && CSS.escape ? CSS.escape(controls) : controls.replace(/"/g, '\\"');
+  let scoped: Element | null = null;
+  let scope: Element | null = btn.parentElement;
+  for (let i = 0; i < 5 && scope && !scoped; i++) {
+    // A malformed id can make the selector throw; that must degrade to the
+    // document fallback, not kill the tab phase (panel review, T79).
+    try {
+      scoped = scope.querySelector(`[id="${eid}"]`);
+    } catch {
+      break;
     }
-    const panel = scoped || document.getElementById(controls);
-    if (panel) {
-      const dataState = panel.getAttribute('data-state');
-      if (dataState === 'active') return panel;
-      if (isVisible(panel)) return panel;
-    }
+    scope = scope.parentElement;
+  }
+  return scoped || document.getElementById(controls);
+};
+
+export const findControlledPanel = (btn: Element): Element | null => {
+  const panel = resolveControlsTarget(btn);
+  if (panel) {
+    const dataState = panel.getAttribute('data-state');
+    if (dataState === 'active') return panel;
+    if (isVisible(panel)) return panel;
   }
   const searchContexts: Element[] = [];
   const tablist = btn.closest('[role="tablist"]');
@@ -370,10 +476,11 @@ export const discoverDropdownButtons = (config: ResolvedConfig): HTMLElement[] =
   [...document.querySelectorAll<HTMLElement>('button, [role="button"], [role="combobox"]')]
     .filter(
       (b) =>
-        isDropdownButton(b) &&
+        isClickableDropdownTrigger(b) &&
         isClickablyVisible(b) &&
         !isInsideDangerousNavigationArea(b) &&
         !b.closest('form') &&
+        !(b as HTMLButtonElement).form &&
         !(b as HTMLButtonElement).disabled,
     )
     .slice(0, config.maxDropdownButtons);
@@ -383,7 +490,7 @@ export const findVisibleDropdownPanel = (btn: Element): Element | null => {
   if (cp) return cp;
   const cands = [
     ...document.querySelectorAll(
-      '[role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper], [data-radix-menu-content], [data-radix-select-content], [cmdk-list]',
+      '[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper], [data-radix-menu-content], [data-radix-select-content], [cmdk-list]',
     ),
   ].filter(
     (e) => isVisible(e) && cleanBlock((e as HTMLElement).innerText || e.textContent || '').length > 0,
@@ -566,15 +673,13 @@ export const captureCurrentTabPanel = async (
   return null;
 };
 
+// Index of the button marked selected, or -1. Whole class tokens: the old
+// substring test took `btn-primary` and `inactive` for the selected tab and
+// "restored" a dialog's Save button up to three times.
 export const getActiveButtonIndex = (bs: HTMLElement[]): number => {
   const ia = bs.findIndex((b) => b.getAttribute('aria-selected') === 'true');
   if (ia >= 0) return ia;
-  const is = bs.findIndex(
-    (b) =>
-      /active|selected|current|primary|bg-primary/i.test(b.className || '') ||
-      /active|selected|current/i.test(b.getAttribute('data-state') || ''),
-  );
-  return is >= 0 ? is : 0;
+  return bs.findIndex((b) => isMarkedSelected(b));
 };
 
 export const annotateTabButtons = (ctx: ExtractContext, gs: TabGroup[]): void => {
@@ -613,6 +718,39 @@ const isTabPhaseBudgetExceeded = (
   return Date.now() - state.tabPhaseStartMs > config.tabPhaseBudgetMs;
 };
 
+// --- First-click guard (BL-19 round 2: D4, D9) ---
+// Discovery cannot prove a group is a tab strip; its first click can. The
+// snapshot is taken AFTER the scroll that precedes every click, so content a
+// scroll loads lazily is part of "before", not evidence of a panel.
+interface TabClickSnapshot {
+  selected: boolean;
+  target: Element | null;
+  targetShown: boolean;
+  text: string;
+}
+
+// Same trust as findControlledPanel: Radix keeps `hidden` mid-transition.
+const isPanelShown = (el: Element): boolean => el.getAttribute('data-state') === 'active' || isVisible(el);
+
+const snapshotTabClick = (btn: Element, root: Element): TabClickSnapshot => {
+  const target = resolveControlsTarget(btn);
+  return {
+    selected: isMarkedSelected(btn),
+    target,
+    targetShown: Boolean(target && isPanelShown(target)),
+    text: getVisibleText(root),
+  };
+};
+
+// Any one of: the button became selected, the element it controls appeared,
+// the root shows a line it did not show before.
+const tabClickRevealedPanel = (btn: Element, root: Element, before: TabClickSnapshot): boolean => {
+  if (!before.selected && isMarkedSelected(btn)) return true;
+  const target = resolveControlsTarget(btn);
+  if (target && isPanelShown(target) && (!before.targetShown || target !== before.target)) return true;
+  return Boolean(extractTextDelta(before.text, getVisibleText(root)));
+};
+
 export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
   const { config, state } = ctx;
   if (!config.extractTabs || !ctx.flags.allowClickTabs) return;
@@ -633,8 +771,46 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
       break;
     }
     const root = findTabRoot(g);
-    const activeIndex = getActiveButtonIndex(g.buttons);
+    // -1 when no button is marked selected: Phase 1 then reads button 0
+    // without clicking, and no click "restores" a state nobody observed (D9).
+    const markedIndex = getActiveButtonIndex(g.buttons);
+    const activeIndex = markedIndex >= 0 ? markedIndex : 0;
     const activeButton = g.buttons[activeIndex];
+    const groupLabel = g.buttons.map(getButtonText).join(' | ').slice(0, 120);
+    const guard = {
+      confirmed: false,
+      stopped: false,
+      lastClicked: null as HTMLElement | null,
+      activeReadWithoutClick: false,
+    };
+
+    // Every click of the group goes through here. Returns the root's visible
+    // text from just before the click, or null once the group is stopped.
+    const clickInGroup = async (btn: HTMLElement): Promise<string | null> => {
+      if (guard.stopped) return null;
+      await ensureElementInViewport(btn);
+      if (!guard.confirmed) await waitForDomToSettle(root, config.tabSettleMs, 120);
+      resetComputedStyleCache();
+      const before = snapshotTabClick(btn, root);
+      await clickAndWait(btn, root, config.tabClickWaitMs, config.tabSettleMs);
+      guard.lastClicked = btn;
+      resetComputedStyleCache();
+      if (!guard.confirmed) {
+        if (!tabClickRevealedPanel(btn, root, before)) {
+          // The stray click is the whole cost. No second click to "undo" it:
+          // on a radio, a stepper or an action that repeats, never reverts.
+          guard.stopped = true;
+          ctx.progress(
+            'tabs',
+            `group "${groupLabel}": first click on "${getButtonText(btn)}" revealed no panel — group stopped`,
+            'warn',
+          );
+          return null;
+        }
+        guard.confirmed = true;
+      }
+      return before.text;
+    };
 
     // ---------------------------------------------------------------------
     // PHASE 1: pre-capture the initially active tab. Clicking the active tab
@@ -651,9 +827,11 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
           captureCurrentTabPanel(ctx, activeButton, g, root, '', ''),
           config.perTabHardTimeoutMs,
         );
+        guard.activeReadWithoutClick = Boolean(captured);
 
-        if (!captured) {
-          // Cycle-away-and-back: click a different tab, then click back.
+        // Cycle away and back only from a button marked selected: with none
+        // marked there is no observed state to come back to (D9).
+        if (!captured && markedIndex >= 0) {
           const otherIndex = g.buttons.findIndex(
             (b, i) => i !== activeIndex && !isProbablyUnsafeTabButton(b, config),
           );
@@ -661,39 +839,40 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
           if (otherIndex >= 0) {
             const otherButton = g.buttons[otherIndex]!;
             try {
-              await clickAndWait(otherButton, root, config.tabClickWaitMs, config.tabSettleMs);
-
-              if (config.abortTabCaptureOnUrlDrift && isUrlDrifted(state)) {
-                const restored = await tryRestoreUrl(state);
-                if (!restored) {
-                  state.tabCaptureAborted = true;
-                  ctx.progress(
-                    'tabs',
-                    `URL drifted in Phase 1 (active tab "${activeLabel}") and could not be restored — aborting all remaining tab groups`,
-                    'warn',
-                  );
+              if ((await clickInGroup(otherButton)) !== null) {
+                if (config.abortTabCaptureOnUrlDrift && isUrlDrifted(state)) {
+                  const restored = await tryRestoreUrl(state);
+                  if (!restored) {
+                    state.tabCaptureAborted = true;
+                    ctx.progress(
+                      'tabs',
+                      `URL drifted in Phase 1 (active tab "${activeLabel}") and could not be restored — aborting all remaining tab groups`,
+                      'warn',
+                    );
+                  }
                 }
-              }
 
-              if (!state.tabCaptureAborted) {
-                resetComputedStyleCache();
-                const textWhileAway = getVisibleText(root);
+                if (!state.tabCaptureAborted) {
+                  resetComputedStyleCache();
+                  const textWhileAway = getVisibleText(root);
 
-                await clickAndWait(activeButton, root, config.tabClickWaitMs, config.tabSettleMs);
-                resetComputedStyleCache();
-                const textAfterReturn = getVisibleText(root);
+                  if ((await clickInGroup(activeButton)) !== null) {
+                    resetComputedStyleCache();
+                    const textAfterReturn = getVisibleText(root);
 
-                captured = await withHardTimeout(
-                  captureCurrentTabPanel(
-                    ctx,
-                    activeButton,
-                    g,
-                    root,
-                    textWhileAway,
-                    textAfterReturn,
-                  ),
-                  config.perTabHardTimeoutMs,
-                );
+                    captured = await withHardTimeout(
+                      captureCurrentTabPanel(
+                        ctx,
+                        activeButton,
+                        g,
+                        root,
+                        textWhileAway,
+                        textAfterReturn,
+                      ),
+                      config.perTabHardTimeoutMs,
+                    );
+                  }
+                }
               }
             } catch (e) {
               ctx.progress(
@@ -701,10 +880,14 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
                 `cycle-away-and-back failed for active tab "${activeLabel}": ${String(e)}`,
                 'warn',
               );
-              try {
-                await clickAndWait(activeButton, root, config.tabClickWaitMs, config.tabSettleMs);
-              } catch {
-                // active tab restore failed — continue
+              // Back to the active tab only in a group its first click proved.
+              if (guard.confirmed && guard.lastClicked !== activeButton) {
+                try {
+                  await clickAndWait(activeButton, root, config.tabClickWaitMs, config.tabSettleMs);
+                  guard.lastClicked = activeButton;
+                } catch {
+                  // active tab restore failed — continue
+                }
               }
             }
           }
@@ -740,12 +923,19 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
     }
 
     if (state.tabCaptureAborted) break;
+    if (guard.stopped) continue;
 
     // ---------------------------------------------------------------------
-    // PHASE 2: capture remaining (non-active) tabs via content-delta.
+    // PHASE 2: capture remaining (non-active) tabs via content-delta. An
+    // active tab Phase 1 did not capture goes LAST: the first click then lands
+    // on a tab whose panel is hidden (a click on the visible one shows no
+    // change and would stop a real group), and the group ends where it began.
     // ---------------------------------------------------------------------
-    for (const btn of g.buttons) {
-      if (state.tabCaptureAborted) break;
+    const activeId = activeButton?.dataset?.aiExporterButtonId;
+    const order = g.buttons.filter((b) => b !== activeButton);
+    if (activeButton && !(activeId && state.tabPanelsByButtonId.has(activeId))) order.push(activeButton);
+    for (const btn of order) {
+      if (state.tabCaptureAborted || guard.stopped) break;
       if (isTabPhaseBudgetExceeded(config, state)) {
         state.tabCaptureAborted = true;
         ctx.progress(
@@ -759,14 +949,9 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
       const bid = btn.dataset.aiExporterButtonId;
       if (!bid || !label) continue;
 
-      // Skip the active tab (already captured in Phase 1).
-      if (bid === activeButton?.dataset?.aiExporterButtonId && state.tabPanelsByButtonId.has(bid)) {
-        continue;
-      }
-
       try {
-        const beforeText = getVisibleText(root);
-        await clickAndWait(btn, root, config.tabClickWaitMs, config.tabSettleMs);
+        const beforeText = await clickInGroup(btn);
+        if (beforeText === null) break;
 
         if (config.abortTabCaptureOnUrlDrift && isUrlDrifted(state)) {
           ctx.progress('tabs', `URL drifted after tab "${label}"`, 'warn');
@@ -814,8 +999,16 @@ export const extractTabPanels = async (ctx: ExtractContext): Promise<void> => {
       }
     }
 
-    // Restore active tab at the end (skip if aborted — page has drifted).
-    if (!state.tabCaptureAborted && activeButton) {
+    // Restore the tab the reader had open: only in a confirmed group, only to
+    // an observed state (a button marked selected, or the one whose panel was
+    // read without a click), never after an abort (the page has drifted).
+    if (
+      !state.tabCaptureAborted &&
+      guard.confirmed &&
+      activeButton &&
+      guard.lastClicked !== activeButton &&
+      (markedIndex >= 0 || guard.activeReadWithoutClick)
+    ) {
       try {
         await clickAndWait(activeButton, root, config.tabClickWaitMs, config.tabSettleMs);
         resetComputedStyleCache();
@@ -833,9 +1026,13 @@ export const captureDropdownPanel = async (ctx: ExtractContext, btn: HTMLElement
   const label = getButtonFallbackLabel(btn);
   const did = btn.dataset.aiExporterDropdownId;
   if (!did) return;
+  let openedHere = false;
   try {
     const we = btn.getAttribute('aria-expanded') === 'true';
-    if (!we) await clickAndWait(btn, document.body, config.dropdownClickWaitMs, config.dropdownSettleMs);
+    if (!we) {
+      await clickAndWait(btn, document.body, config.dropdownClickWaitMs, config.dropdownSettleMs);
+      openedHere = true;
+    }
     const panel = findVisibleDropdownPanel(btn);
     if (panel) {
       const ls = renderNode(ctx, panel, 1, {
@@ -855,14 +1052,22 @@ export const captureDropdownPanel = async (ctx: ExtractContext, btn: HTMLElement
         });
       }
     }
-    if (!we) {
-      pressEscape();
-      await sleep(80);
-    }
   } catch (e) {
     ctx.progress('dropdowns', `dropdown "${label}" failed: ${String(e)}`, 'warn');
-    pressEscape();
-    await sleep(80);
+  } finally {
+    // BL-24: close only what this call opened, on its own trigger. No synthetic
+    // Escape: Radix listens for it on document in the capture phase, Headless
+    // UI on window, Bootstrap's dropdown on document, so an Escape sent from
+    // anywhere also dismisses the reader's own dialog, popover or edit. A menu
+    // without aria-expanded stays open, a smaller harm than closing theirs.
+    if (openedHere && btn.isConnected && btn.getAttribute('aria-expanded') === 'true') {
+      try {
+        btn.click();
+        await sleep(80);
+      } catch {
+        // left open
+      }
+    }
   }
 };
 

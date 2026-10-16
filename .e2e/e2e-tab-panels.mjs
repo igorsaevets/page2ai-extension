@@ -30,6 +30,15 @@
 //                   safety fix must not drop widgets that declare themselves
 //                   via CSS convention rather than ARIA.
 //
+//  BL-19 round 2 (T118): toggle groups, toolbars, dialog footers in any
+//  language, content buttons inside a panel, button groups, disclosures,
+//  close/add buttons inside a tablist, buttons that own a form from outside it,
+//  carousels, popover/command invokers: each counts its clicks and must count
+//  zero. A strip that reveals nothing costs at most one click (first-click
+//  guard). The aggressive profile closes a menu on its own trigger and never
+//  sends Escape. W3Schools, Bootstrap 5 data-bs-toggle and Radix Tabs are the
+//  positive controls.
+//
 // Run:  npm i --no-save puppeteer-core
 //       npx wxt build --mode e2e
 //       node .e2e/e2e-tab-panels.mjs
@@ -101,6 +110,11 @@ const page = (title, body) => `<!doctype html>
 <body><main><h1>${title}</h1>
 <p>Fixture body for the tab-panels suite; long enough to render.</p>
 ${body}</main>${WIDGET_SCRIPT}</body></html>`;
+
+// BL-19 round 2 fixtures count every click in the page: window.__aClicks[id].
+const COUNTER = `<script>function c(k){(window.__aClicks=window.__aClicks||{})[k]=(window.__aClicks[k]||0)+1}</script>`;
+const cb = (id, label, attrs = '') =>
+  `<button type="button" id="${id}" ${attrs} onclick="c('${id}')">${label}</button>`;
 
 const FIXTURES = {
   // Devsite shape: both widgets use id="panel-python" / id="panel-js".
@@ -212,6 +226,196 @@ line two of the sample</code></pre>
          document.getElementById('legacy-one').hidden = which !== 'one';
          document.getElementById('legacy-two').hidden = which !== 'two';
        }
+     </script>`,
+  ),
+  // --- BL-19 round 2 (T118). Every negative fixture below is a shape the old
+  // classifier ACCEPTED (traced in DESIGN.md D1-D10); each counts its clicks in
+  // the page, so a regression shows as a number, not as a missing marker.
+  '/radix-toggle': page(
+    'Radix ToggleGroup and Toolbar (D1)',
+    `${COUNTER}<h2>Formatting</h2>
+     <div role="group" dir="ltr" data-orientation="horizontal" class="tabs">
+       ${cb('tgB', 'Bold', 'role="radio" aria-checked="true" data-state="on" data-orientation="horizontal" class="active"')}
+       ${cb('tgI', 'Italic', 'role="radio" aria-checked="false" data-state="off" data-orientation="horizontal"')}
+     </div>
+     <div role="group" data-orientation="horizontal">
+       ${cb('tmB', 'Strong', 'aria-pressed="true" data-state="on" data-orientation="horizontal"')}
+       ${cb('tmU', 'Underline', 'aria-pressed="false" data-state="off" data-orientation="horizontal"')}
+     </div>
+     <div role="toolbar" data-orientation="horizontal" aria-label="Alignment">
+       ${cb('tbL', 'Left', 'data-orientation="horizontal" class="active"')}
+       ${cb('tbC', 'Center', 'data-orientation="horizontal"')}
+     </div>`,
+  ),
+  '/dialog-footer': page(
+    'Dialog footers outside EN (D3, D5)',
+    `${COUNTER}<div class="modal show" style="display:block;position:static" role="dialog">
+       <div class="modal-content"><div class="modal-body"><p>Nội dung hộp thoại.</p></div>
+       <div class="modal-footer">${cb('vHuy', 'Hủy', 'class="btn btn-secondary"')}${cb('vLuu', 'Lưu', 'class="btn btn-primary"')}</div></div>
+     </div>
+     <div role="dialog"><p>Los cambios no se han guardado.</p>
+       <footer class="tabs">${cb('esC', 'Cancelar', 'class="active"')}${cb('esG', 'Guardar')}</footer></div>
+     <div class="el-dialog__footer">${cb('zhC', '取消')}${cb('zhS', '保存', 'class="btn-primary"')}</div>`,
+  ),
+  '/panel-content': page(
+    'Content buttons inside a tab panel (D2)',
+    `${COUNTER}<div class="widget">
+       <div role="tablist">
+         <button role="tab" aria-controls="pc-a" aria-selected="true">Overview</button>
+         <button role="tab" aria-controls="pc-b" aria-selected="false">Details</button>
+       </div>
+       <div class="tab-content">
+         <section class="tab-pane" role="tabpanel" id="pc-a"><p>PANEL_A_MIDDLE was this answer helpful?</p>
+           <div>${cb('pcYes', 'Yes', 'class="active"')}${cb('pcNo', 'No')}</div></section>
+         <section class="tab-pane" role="tabpanel" id="pc-b" hidden><p>PANEL_B_MIDDLE details of the second panel.</p></section>
+       </div>
+     </div>`,
+  ),
+  '/btn-group': page(
+    'Bootstrap btn-group view switcher (D3)',
+    `${COUNTER}<div class="tabs"><div class="btn-group" role="group">
+       ${cb('bgD', 'Day', 'class="btn btn-outline active"')}${cb('bgW', 'Week', 'class="btn btn-outline"')}${cb('bgM', 'Month', 'class="btn btn-outline"')}
+     </div></div>`,
+  ),
+  '/disclosure': page(
+    'Disclosure buttons and carousel arrows (D3)',
+    `${COUNTER}<div class="tab-bar">
+       ${cb('dc1', 'Shipping', 'aria-expanded="false" aria-controls="dcp1"')}${cb('dc2', 'Returns', 'aria-expanded="false" aria-controls="dcp2"')}
+     </div>
+     <div id="dcp1" hidden>Shipping text</div><div id="dcp2" hidden>Returns text</div>
+     <div class="carousel-controls">${cb('crPrev', 'Previous', 'aria-controls="car1"')}${cb('crNext', 'Next', 'aria-controls="car1" class="active"')}</div>
+     <div id="car1"><p>Slide text</p></div>`,
+  ),
+  '/tablist-chrome': page(
+    'Closable tab strip: close and add buttons inside the tablist (D7)',
+    `${COUNTER}<div class="widget">
+       <div role="tablist">
+         <button role="tab" aria-controls="tc-a" aria-selected="true">main.py</button>
+         ${cb('tcClose', '×', 'aria-label="Close main.py"')}
+         <button role="tab" aria-controls="tc-b" aria-selected="false">util.py</button>
+         ${cb('tcAdd', '+')}
+       </div>
+       <section role="tabpanel" id="tc-a"><pre><code>TC_MAIN_MIDDLE = 1</code></pre></section>
+       <section role="tabpanel" id="tc-b" hidden><pre><code>TC_UTIL_MIDDLE = 2</code></pre></section>
+     </div>`,
+  ),
+  '/form-owner': page(
+    'Buttons that submit a form they are not inside (D8)',
+    `${COUNTER}<form id="f1" action="/never" onsubmit="c('submit');return false"><input name="q" value="x"></form>
+     <div class="tab-bar">
+       <button id="foN" form="f1" onclick="c('foN')">Weiter</button>
+       <button id="foB" form="f1" onclick="c('foB')">Zurück</button>
+     </div>`,
+  ),
+  '/first-click': page(
+    'A tab-looking strip whose buttons reveal nothing (D4, D9)',
+    `${COUNTER}<div class="tab-bar">${cb('fcA', 'Alpha')}${cb('fcB', 'Beta')}${cb('fcG', 'Gamma')}</div>
+     <p>Nothing on this page changes when those three buttons are pressed.</p>`,
+  ),
+  '/carousel': page(
+    'Carousel slide pickers marked up as a tablist (APG pattern)',
+    `${COUNTER}<section aria-roledescription="carousel" aria-label="Featured">
+       <div role="tablist" aria-label="Slides">
+         ${cb('cs1', '', 'role="tab" aria-label="Slide 1" aria-selected="true" aria-controls="sl1"')}
+         ${cb('cs2', '', 'role="tab" aria-label="Slide 2" aria-selected="false" aria-controls="sl2"')}
+       </div>
+       <div id="sl1" role="tabpanel"><p>Slide one text</p></div><div id="sl2" role="tabpanel" hidden><p>Slide two text</p></div>
+     </section>`,
+  ),
+  '/invokers': page(
+    'Popover and command invoker buttons',
+    `${COUNTER}<div class="tab-bar">
+       <button id="ivP" popovertarget="pop1" onclick="c('ivP')">Info</button>
+       <button id="ivC" commandfor="dlg1" command="show-modal" onclick="c('ivC')">More</button>
+       <button id="ivD" onclick="c('ivD')" class="active">Plain</button>
+     </div>
+     <div id="pop1" popover>Popover text</div><dialog id="dlg1">Dialog text</dialog>`,
+  ),
+  '/escape': page(
+    'Aggressive profile: a menu next to the reader own open dialog (D6, D10)',
+    `${COUNTER}<div id="userModal" role="dialog"><p>USER_MODAL_TEXT the reader is still editing.</p></div>
+     <script>
+       window.__esc = 0;
+       document.addEventListener('keydown', (e) => {
+         if (e.key === 'Escape') { window.__esc++; document.getElementById('userModal').hidden = true; }
+       }, true);
+       function toggleMenu(btn) {
+         c('menuBtn');
+         const open = btn.getAttribute('aria-expanded') === 'true';
+         btn.setAttribute('aria-expanded', String(!open));
+         document.getElementById('menu1').hidden = open;
+       }
+     </script>
+     <div>
+       <button type="button" id="menuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="menu1" onclick="toggleMenu(this)">Options</button>
+       <div role="menu" id="menu1" hidden><div role="menuitem">MENU_ITEM_PAYLOAD</div></div>
+       <button type="button" id="shareBtn" aria-haspopup="dialog" onclick="c('shareBtn')">Share</button>
+     </div>`,
+  ),
+  // Positive controls: real widgets the stricter rules must still capture.
+  '/w3schools': page(
+    'W3Schools tabs: div.tab > button.tablinks',
+    `<div class="tab">
+       <button class="tablinks active" onclick="openCity(event, 'London')">London</button>
+       <button class="tablinks" onclick="openCity(event, 'Paris')">Paris</button>
+     </div>
+     <div id="London" class="tabcontent" style="display:block"><p>W3_LONDON_MIDDLE is the capital city of England.</p></div>
+     <div id="Paris" class="tabcontent" style="display:none"><p>W3_PARIS_MIDDLE is the capital of France.</p></div>
+     <script>
+       function openCity(evt, name) {
+         document.querySelectorAll('.tabcontent').forEach((t) => { t.style.display = 'none'; });
+         document.querySelectorAll('.tablinks').forEach((t) => { t.className = t.className.replace(' active', ''); });
+         document.getElementById(name).style.display = 'block';
+         evt.currentTarget.className += ' active';
+       }
+     </script>`,
+  ),
+  '/bootstrap5': page(
+    'Bootstrap 5 tabs declared by data-bs-toggle, no role=tablist',
+    `<div class="nav nav-tabs" id="bsTabs">
+       <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#bs-home" type="button">Home</button>
+       <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bs-profile" type="button">Profile</button>
+     </div>
+     <div class="tab-content">
+       <div class="tab-pane active" id="bs-home"><p>BS_HOME_MIDDLE first pane.</p></div>
+       <div class="tab-pane" id="bs-profile" style="display:none"><p>BS_PROFILE_MIDDLE second pane.</p></div>
+     </div>
+     <script>
+       document.querySelectorAll('#bsTabs [data-bs-toggle="tab"]').forEach((b) => b.addEventListener('click', () => {
+         document.querySelectorAll('#bsTabs .nav-link').forEach((x) => x.classList.toggle('active', x === b));
+         document.querySelectorAll('.tab-pane').forEach((p) => {
+           const on = '#' + p.id === b.getAttribute('data-bs-target');
+           p.classList.toggle('active', on);
+           p.style.display = on ? 'block' : 'none';
+         });
+       }));
+     </script>`,
+  ),
+  '/radix-tabs': page(
+    'Radix Tabs: data-state active/inactive, inactive panel unmounted',
+    `<div dir="ltr" data-orientation="horizontal" class="rx">
+       <div role="tablist" aria-orientation="horizontal" data-orientation="horizontal">
+         <button type="button" role="tab" aria-selected="true" aria-controls="rx-c-a" data-state="active" data-orientation="horizontal">Account</button>
+         <button type="button" role="tab" aria-selected="false" aria-controls="rx-c-p" data-state="inactive" data-orientation="horizontal">Password</button>
+       </div>
+       <div data-state="active" role="tabpanel" id="rx-c-a"><p>RX_ACCOUNT_MIDDLE account settings.</p></div>
+       <div data-state="inactive" role="tabpanel" id="rx-c-p" hidden></div>
+     </div>
+     <script>
+       const RX = { 'rx-c-a': 'RX_ACCOUNT_MIDDLE account settings.', 'rx-c-p': 'RX_PASSWORD_MIDDLE password settings.' };
+       document.querySelectorAll('.rx [role="tab"]').forEach((t) => t.addEventListener('click', () => {
+         document.querySelectorAll('.rx [role="tab"]').forEach((x) => {
+           const on = x === t;
+           x.setAttribute('aria-selected', String(on));
+           x.dataset.state = on ? 'active' : 'inactive';
+         });
+         document.querySelectorAll('.rx [role="tabpanel"]').forEach((p) => {
+           const on = p.id === t.getAttribute('aria-controls');
+           p.dataset.state = on ? 'active' : 'inactive';
+           p.hidden = !on;
+           p.innerHTML = on ? '<p>' + RX[p.id] + '</p>' : '';
+         });
+       }));
      </script>`,
   ),
 };
@@ -412,6 +616,78 @@ try {
       'legacy-tabs: both legacy pane payloads survive',
       count(md, 'LEGACY_HOME_MIDDLE') === 1 && count(md, 'LEGACY_AWAY_MIDDLE') === 1,
     );
+  }
+  // 7. BL-19 round 2 negatives: zero clicks, and no [Tab Button: …] marker.
+  const NEGATIVES = [
+    ['/radix-toggle', ['tgB', 'tgI', 'tmB', 'tmU', 'tbL', 'tbC'], /\[Tab Button: (Bold|Italic|Strong|Underline|Left|Center)\]/],
+    ['/dialog-footer', ['vHuy', 'vLuu', 'esC', 'esG', 'zhC', 'zhS'], /\[Tab Button: (Hủy|Lưu|Cancelar|Guardar|取消|保存)\]/],
+    ['/panel-content', ['pcYes', 'pcNo'], /\[Tab Button: (Yes|No)\]/],
+    ['/btn-group', ['bgD', 'bgW', 'bgM'], /\[Tab Button: (Day|Week|Month)\]/],
+    ['/disclosure', ['dc1', 'dc2', 'crPrev', 'crNext'], /\[Tab Button: (Shipping|Returns|Previous|Next)\]/],
+    ['/tablist-chrome', ['tcClose', 'tcAdd'], /\[Tab Button: (×|\+)\]/],
+    ['/form-owner', ['foN', 'foB', 'submit'], /\[Tab Button: (Weiter|Zurück)\]/],
+    ['/carousel', ['cs1', 'cs2'], /\[Tab Button: Slide/],
+    ['/invokers', ['ivP', 'ivC', 'ivD'], /\[Tab Button: (Info|More|Plain)\]/],
+  ];
+  for (const [route, ids, marker] of NEGATIVES) {
+    const r = await extract(tab, sw, `${base}${route}`);
+    const md = r.markdown || '';
+    const clicks = await tab.evaluate(() => window.__aClicks || {});
+    const hit = ids.filter((k) => clicks[k]);
+    check(`${route}: status ok`, r.status === 'ok', `status=${r.status}`);
+    check(`${route}: none of ${ids.length} controls clicked`, hit.length === 0, JSON.stringify(clicks));
+    check(`${route}: no [Tab Button: …] marker`, !marker.test(md));
+  }
+  {
+    const r = await extract(tab, sw, `${base}/panel-content`);
+    const md = r.markdown || '';
+    check('panel-content: the real tabs around the content buttons still captured',
+      count(md, 'PANEL_A_MIDDLE') >= 1 && count(md, 'PANEL_B_MIDDLE') >= 1);
+  }
+  {
+    const r = await extract(tab, sw, `${base}/tablist-chrome`);
+    const md = r.markdown || '';
+    check('tablist-chrome: both editor tabs captured', count(md, 'TC_MAIN_MIDDLE') >= 1 && count(md, 'TC_UTIL_MIDDLE') >= 1);
+  }
+
+  // 8. First-click guard: a strip that passes the classifier but reveals
+  //    nothing costs at most one click, and nothing "restores" it.
+  {
+    await extract(tab, sw, `${base}/first-click`);
+    const clicks = await tab.evaluate(() => window.__aClicks || {});
+    const total = (clicks.fcA || 0) + (clicks.fcB || 0) + (clicks.fcG || 0);
+    check('first-click: at most one click on a strip that reveals no panel', total <= 1, JSON.stringify(clicks));
+  }
+
+  // 9. Aggressive profile: the menu is opened and closed on its own trigger;
+  //    no Escape reaches the reader's dialog; a dialog opener is never clicked.
+  {
+    const r = await extract(tab, sw, `${base}/escape`, { overrides: { interactionMode: 'aggressive' } });
+    const md = r.markdown || '';
+    const s = await tab.evaluate(() => ({
+      clicks: window.__aClicks || {},
+      esc: window.__esc,
+      modalHidden: document.getElementById('userModal').hidden,
+      expanded: document.getElementById('menuBtn').getAttribute('aria-expanded'),
+    }));
+    check('escape: the menu was opened (aggressive profile active)', (s.clicks.menuBtn || 0) >= 1, JSON.stringify(s));
+    check('escape: menu content captured', count(md, 'MENU_ITEM_PAYLOAD') >= 1);
+    check('escape: no Escape keydown reached the document', s.esc === 0, JSON.stringify(s));
+    check("escape: the reader's dialog is still open", s.modalHidden === false);
+    check('escape: the menu was closed on its trigger', s.expanded === 'false' && s.clicks.menuBtn === 2, JSON.stringify(s));
+    check('escape: aria-haspopup="dialog" opener never clicked', !s.clicks.shareBtn, JSON.stringify(s));
+  }
+
+  // 10. Positive controls for the stricter rules.
+  for (const [route, needles] of [
+    ['/w3schools', ['W3_LONDON_MIDDLE', 'W3_PARIS_MIDDLE']],
+    ['/bootstrap5', ['BS_HOME_MIDDLE', 'BS_PROFILE_MIDDLE']],
+    ['/radix-tabs', ['RX_ACCOUNT_MIDDLE', 'RX_PASSWORD_MIDDLE']],
+  ]) {
+    const r = await extract(tab, sw, `${base}${route}`);
+    const md = r.markdown || '';
+    check(`${route}: every panel captured`, needles.every((n) => count(md, n) >= 1),
+      needles.map((n) => `${n}=${count(md, n)}`).join(' '));
   }
 } finally {
   await browser.close().catch(() => {});
