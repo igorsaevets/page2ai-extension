@@ -5,13 +5,13 @@
 
 ## Summary
 
-Page2AI does not collect, transmit, sell, or share any personal data. It converts the page in your browser. There is no server component, no analytics, no telemetry, no crash reporting, no third-party SDK. Version 1.4.0, the version in the stores today, also asks the site you are reading for a Markdown copy of the page; the next release does not. See [Network requests](#network-requests).
+Page2AI does not collect, transmit, sell, or share any personal data. It converts the page in your browser. There is no server component, no analytics, no telemetry, no crash reporting, no third-party SDK. Up to version 1.4.0 it also asked the site you were reading for a Markdown copy of the page; version 1.5.0, released 2026-10-17, makes no network request. See [Network requests](#network-requests).
 
 If you don't want to trust the summary, the rest of this document walks through what Page2AI does with what you touch, permission by permission, feature by feature.
 
 ## Who this policy applies to
 
-This policy covers the Page2AI browser extension published on the Chrome Web Store (and, in the future, Firefox Add-ons and Microsoft Edge Add-ons). The publisher is **Igor Saevets** (`support@igorsaevets.com`), an independent open-source developer.
+This policy covers the Page2AI browser extension published on the Chrome Web Store and on Firefox Add-ons (addons.mozilla.org). The publisher is **Igor Saevets** (`support@igorsaevets.com`), an independent open-source developer.
 
 The source code that implements this policy is public and MIT-licensed at [github.com/igorsaevets/page2ai-extension](https://github.com/igorsaevets/page2ai-extension). Anything you read here can be verified against that source.
 
@@ -37,32 +37,32 @@ No content is transmitted to any server operated by Page2AI, the publisher, or a
 
 ## Network requests
 
-**Version 1.4.0, the version in the stores today, and earlier versions ask the site you are reading for a
-Markdown copy of the page** each time you invoke the extension:
-
-- They request `/llms.txt`, `/docs/llms.txt` and `/llms-full.txt` from that site, with your cookies for it, as
-  following a link on it would. No setting turns these three requests off.
-- With the Docs or Research profile they also request the page's address with `.md` and with `/index.md` added, on
-  that site, whether or not such a file exists, and any `.md` address for the page that the page's
-  `<link rel="alternate">` or the site's `llms.txt` names, if it is on that site or on one of ten documentation hosts
-  (`developers.openai.com`, `platform.openai.com`, `platform.claude.com`, `docs.anthropic.com`, `code.claude.com`, `docs.github.com`, `docs.vercel.com`, `supabase.com`, `docs.stripe.com`, `langchain-ai.github.io`). They stop at the first one that answers with Markdown. Auto-detect, the popup's default, picks Docs when
-  the page looks like documentation; the Marketing, WordPress and Dashboard profiles make none of these `.md`
-  requests. Requests to the site carry your cookies for it. Requests to one of the ten hosts carry none, but, like
-  any request a page makes, they show that host your IP address and, under the browser's default referrer policy,
-  the site you were on.
-- When they copy a part of the page to read its text (a tab's label, or the text around a group of tabs), the
-  browser may load images, video or audio in that part that the page has not loaded yet, from wherever the page
-  loads them.
-
-None of these requests goes to the author of Page2AI or to an analytics or other service.
-
-**From the next release, Page2AI makes no network request.** It reads only the page in your tab, and no longer asks
+**Since version 1.5.0, released 2026-10-17, Page2AI makes no network request.** It reads only the page in your tab, and no longer asks
 the site for an `llms.txt` index or a Markdown copy of the page, because such a copy can be older than the page or
 differ from it. It copies parts of the page into a separate document in which the browser loads nothing. The agent
 script built from the same code makes none either. Its build fails if the bundle uses a browser network API or
 anything else that makes the browser load an address ([`scripts/build-agent.mjs`](scripts/build-agent.mjs)), and an
 end-to-end test in Chrome fails if the extension or the agent script requests anything but the page
 ([`.e2e/e2e-agent.mjs`](.e2e/e2e-agent.mjs)).
+
+**Versions up to 1.4.0 asked the site you were reading for a Markdown copy of the page** each time you invoked
+the extension:
+
+- They requested `/llms.txt`, `/docs/llms.txt` and `/llms-full.txt` from that site, with your cookies for it, as
+  following a link on it would. No setting turned these three requests off.
+- With the Docs or Research profile they also requested the page's address with `.md` and with `/index.md` added,
+  on that site, whether or not such a file existed, and any `.md` address for the page that the page's
+  `<link rel="alternate">` or the site's `llms.txt` named, if it was on that site or on one of ten documentation hosts
+  (`developers.openai.com`, `platform.openai.com`, `platform.claude.com`, `docs.anthropic.com`, `code.claude.com`, `docs.github.com`, `docs.vercel.com`, `supabase.com`, `docs.stripe.com`, `langchain-ai.github.io`). They stopped at the first one that answered with Markdown. Auto-detect, the popup's default, picked Docs
+  when the page looked like documentation; the Marketing, WordPress and Dashboard profiles made none of these `.md`
+  requests. Requests to the site carried your cookies for it. Requests to one of the ten hosts carried none, but,
+  like any request a page makes, they showed that host your IP address and, under the browser's default referrer
+  policy, the site you were on.
+- When they copied a part of the page to read its text (a tab's label, or the text around a group of tabs), the
+  browser could load images, video or audio in that part that the page had not loaded yet, from wherever the page
+  loads them.
+
+None of these requests went to the author of Page2AI or to an analytics or other service.
 
 To capture content the page shows only on demand, the extension scrolls the page and opens its tabs and collapsed
 sections, as you would. The page may then load more of its own content, from wherever it loads it, exactly as when
