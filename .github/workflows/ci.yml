@@ -41,6 +41,9 @@ jobs:
       # or a new network call in the bundle (scripts/build-agent.mjs).
       - name: Build the agent script
         run: npm run build:agent
+      # The same check the release jobs of publish-chrome.yml run before they hand the files on.
+      - name: Check the agent build (checksums, the version and commit on line 1)
+        run: bash scripts/release-agent.sh check .output/agent "$(jq -r .version package.json)+${GITHUB_SHA:0:7}"
 
   e2e:
     name: End-to-end (real Chrome)
@@ -144,3 +147,25 @@ jobs:
 
       - name: Mock-API suite
         run: node scripts/cws-v2.test.mjs
+
+  release-agent:
+    name: Agent script release client (fake gh)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    # Same reason as cws-client: the agent-release job of publish-chrome.yml uploads for real only when a tag is
+    # cut, so its script is tested here on every push, with a fake gh first on PATH. No token, no network.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Lint the release client
+        run: shellcheck scripts/release-agent.sh
+
+      - name: Fake-gh suite
+        run: node scripts/release-agent.test.mjs

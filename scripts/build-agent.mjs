@@ -5,7 +5,8 @@
 //                        before the page's own scripts, so the page cannot replace it afterwards.
 //   page2ai-agent.fn.js  an async function expression that extracts and returns the result, defining nothing:
 //                        for Chrome DevTools MCP evaluate_script sourcePath (its default format "function").
-//   SHA256SUMS           checksums of both, in `sha256sum -c` format.
+//   page2ai-agent.SHA256SUMS  checksums of both, in `sha256sum -c` format. Named for the script, not bare
+//                        SHA256SUMS: on a GitHub Release it sits next to the Chrome zip, which it does not cover.
 //
 // The build fails when the bundle contains an extension API, a Trusted Types sink, eval, a network API other
 // than the two known fetch calls of the official-Markdown lookup, a console call, or a module statement.
@@ -124,5 +125,5 @@ for (const [name, code] of files) {
   sums.push(`${sha}  ${name}`);
   console.log(`${name}: ${Buffer.byteLength(code)} bytes, sha256 ${sha}`);
 }
-writeFileSync(path.join(outDir, 'SHA256SUMS'), `${sums.join('\n')}\n`);
+writeFileSync(path.join(outDir, 'page2ai-agent.SHA256SUMS'), `${sums.join('\n')}\n`);
 console.log(`agent script ${version}: OK (no extension API, no eval, no Trusted Types sink, ${fetchCalls} fetch calls)`);
