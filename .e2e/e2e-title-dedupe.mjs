@@ -2,8 +2,12 @@
 // duplicate the page's own first heading (port of page2ai-core#9).
 //
 // Every assertion states the FIXED behavior. Against an unfixed build the
-// dup/later-dup/escaped/official cases fail — that failing run is the
+// dup/later-dup/escaped cases fail — that failing run is the
 // in-browser reproduction the issue asks for; keep its output.
+//
+// Case 6 (T135, BL-49): the server offers llms.txt and a .md twin of
+// /official-dup, and the extension must not request either: the content
+// comes only from the page, even with an old officialMarkdownMode override.
 //
 // Run:  npm i --no-save puppeteer-core
 //       npx wxt build --mode e2e   (grants http://127.0.0.1/* so no gesture is needed)
@@ -69,7 +73,7 @@ const FIXTURES = {
   ),
   '/official-dup': page(
     'Official Dup Fixture',
-    `<p>Short shell body; the official markdown mirror below replaces it.</p>`,
+    `<p>Short shell body; PAGE_ONLY_MARKER. A lookup used to replace it with the .md twin.</p>`,
   ),
   // Empty title: the window must stay inert. This is the one case whose
   // failure mode is over-removal, so it gets its own fixture: the h1 happens
@@ -129,8 +133,10 @@ if (!existsSync(path.join(EXT_PATH, 'manifest.json'))) {
   process.exit(2);
 }
 
+const lookups = [];
 const server = createServer((req, res) => {
   const u = new URL(req.url, 'http://127.0.0.1');
+  if (/llms(?:-full)?\.txt$|\.md$/.test(u.pathname)) lookups.push(u.pathname);
   if (u.pathname === '/llms.txt') {
     res.setHeader('content-type', 'text/plain; charset=utf-8');
     res.end(`# Fixture llms.txt\n\n- [Official Dup Fixture](http://127.0.0.1:${port}/official-dup.md)\n`);
@@ -283,14 +289,18 @@ try {
     check('empty-title: no dedupe against the fallback (both render)', n === 2, `count=${n}`);
   }
 
-  // 6. Official-markdown short path: the mirror's own leading H1 is dropped too.
+  // 6. A site that offers llms.txt and a .md twin: only the page is read.
   {
+    lookups.length = 0;
     const r = await extract(tab, sw, `${base}/official-dup`, {
       overrides: { officialMarkdownMode: 'page-specific' },
     });
-    check('official: short path engaged', r.status === 'official-md', `status=${r.status}`);
+    check('page only: status ok', r.status === 'ok', `status=${r.status}`);
+    check('page only: no llms.txt or .md request', lookups.length === 0, lookups.join(' '));
+    check('page only: the page text is there', r.markdown.includes('PAGE_ONLY_MARKER'));
+    check('page only: nothing from the twin', !r.markdown.includes('The official mirror opens with'));
     const n = countExactLine(r.markdown, '# Official Dup Fixture');
-    check('official: exactly one "# Official Dup Fixture"', n === 1, `count=${n}`);
+    check('page only: exactly one "# Official Dup Fixture"', n === 1, `count=${n}`);
     console.log(`--- /official-dup body head ---\n${headOf(r.markdown)}\n---`);
   }
 

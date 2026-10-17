@@ -8,8 +8,8 @@
 //   page2ai-agent.SHA256SUMS  checksums of both, in `sha256sum -c` format. Named for the script, not bare
 //                        SHA256SUMS: on a GitHub Release it sits next to the Chrome zip, which it does not cover.
 //
-// The build fails when the bundle contains an extension API, a Trusted Types sink, eval, a network API other
-// than the two known fetch calls of the official-Markdown lookup, a console call, or a module statement.
+// The build fails when the bundle contains an extension API, a Trusted Types sink, eval, any network API (fetch
+// included: the content comes only from the page, T135 / BL-49), a console call, or a module statement.
 //
 // Run: npm run build:agent
 
@@ -89,21 +89,15 @@ const FORBIDDEN = [
   ['extension API', /\b(?:chrome|browser)\s*\.\s*(?:runtime|storage|scripting|tabs|downloads|action|i18n|permissions|management|alarms|contextMenus|identity|webRequest|declarativeNetRequest|offscreen|sidePanel)\b/],
   ['eval / Function constructor', /\beval\s*\(|\bnew\s+Function\s*\(|\bFunction\s*\(\s*['"`]/],
   ['Trusted Types sink', /\.(?:innerHTML|outerHTML)\s*=(?!=)|insertAdjacentHTML|document\.write|\bDOMParser\b|createContextualFragment|\bsrcdoc\b|setHTMLUnsafe|parseHTMLUnsafe/],
-  ['network API other than fetch', /\bXMLHttpRequest\b|\bsendBeacon\b|\bnew\s+WebSocket\b|\bEventSource\b|\bimportScripts\b|\bRTCPeerConnection\b/],
+  ['network API', /\bfetch\s*\(|\bXMLHttpRequest\b|\bsendBeacon\b|\bnew\s+WebSocket\b|\bEventSource\b|\bimportScripts\b|\bRTCPeerConnection\b/],
   ['console call', /\bconsole\s*\.\s*(?:log|info|warn|error|debug|trace|dir|table)\s*\(/],
   ['module syntax', /^\s*(?:import|export)\s|\bimport\s*\(|\bimport\.meta\b/m],
 ];
-// The official-Markdown lookup (lib/core/llms-txt.ts) is the only network use: the .md twins and llms.txt of the
-// page's own origin (plus the trusted docs hosts). A new fetch must be a deliberate change to this number.
-const EXPECTED_FETCH_CALLS = 2;
-
 const failures = [];
 for (const [what, re] of FORBIDDEN) {
   const lines = iife.split('\n').filter((l) => re.test(l));
   if (lines.length) failures.push(`${what}: ${lines.length} line(s), first: ${lines[0].trim().slice(0, 140)}`);
 }
-const fetchCalls = (iife.match(/\bfetch\s*\(/g) || []).length;
-if (fetchCalls !== EXPECTED_FETCH_CALLS) failures.push(`fetch calls: ${fetchCalls}, expected ${EXPECTED_FETCH_CALLS}`);
 if (failures.length) {
   console.error(`agent bundle check FAILED:\n  ${failures.join('\n  ')}`);
   process.exit(1);
@@ -126,4 +120,4 @@ for (const [name, code] of files) {
   console.log(`${name}: ${Buffer.byteLength(code)} bytes, sha256 ${sha}`);
 }
 writeFileSync(path.join(outDir, 'page2ai-agent.SHA256SUMS'), `${sums.join('\n')}\n`);
-console.log(`agent script ${version}: OK (no extension API, no eval, no Trusted Types sink, ${fetchCalls} fetch calls)`);
+console.log(`agent script ${version}: OK (no extension API, no eval, no Trusted Types sink, no network API)`);
