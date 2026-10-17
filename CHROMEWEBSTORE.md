@@ -104,6 +104,25 @@ with the resubmission of 2026-09-07, after the keyword-spam rejection in section
 
 ---
 
+
+### Detailed description: change for the release after 1.4.0 (not in the dashboard yet)
+
+The extension now takes the content only from the page (BL-49, Igor 2026-10-17), so two bullets of the live text
+above become false. When that release is live, change the Detailed description field in the same dashboard session:
+
+1. Delete the bullet that begins `• MDX / JSX post-processing`: the clean-up it describes ran only on the Markdown
+   copies the extension no longer reads.
+2. Replace the bullet that begins `• llms.txt short path` with this line:
+
+````text
+• Only the page you see — Page2AI converts the page in your tab and nothing else. It never swaps in the site's llms.txt or a Markdown copy, which can be older than the page.
+````
+
+3. Screenshots 2 and 3 (section 2) show the popup's `official-md` status line. Replace them with new captures of the
+   same pages (`scripts/gen-screenshots-real.mjs`) before that version is submitted.
+
+The PRIVACY paragraph of the description stays as it is: it was true before and is still true.
+
 ## 2. Graphic assets
 
 ### Store icon

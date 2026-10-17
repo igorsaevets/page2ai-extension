@@ -1,3 +1,5 @@
+// Mock-ups of the v1.0 store screenshots. The openwebui-tools scene shows the official-md status that the
+// extension no longer has (BL-49, T136): new store screenshots come from scripts/gen-screenshots-real.mjs.
 import puppeteer from 'puppeteer-core';
 import sharp from 'sharp';
 import { readFile, mkdir } from 'node:fs/promises';

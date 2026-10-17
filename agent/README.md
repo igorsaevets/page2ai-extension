@@ -33,7 +33,7 @@ and always replaces the file extension with `.json`. Both paths must be inside t
 `browser_evaluate` with `function: "() => __page2aiAgent.extract()"` and `filename`. Relative file names resolve
 against the workspace root, and the file must stay inside it.
 
-**The result** is one JSON object: `markdown`, `status` (`ok`, `official-md`, ...), `title`, `url`, `profile`,
+**The result** is one JSON object: `markdown`, `status` (`ok`, or `fallback-after-crash` when the extractor failed), `title`, `url`, `profile`,
 `filename`, `page2ai` (the build), `log` (the progress lines the popup shows) and the extractor's counters.
 To get the Markdown alone: `jq -r .markdown result.json > page.md`.
 
@@ -45,10 +45,11 @@ The script runs in the page's main world, next to the page's own scripts. The ex
 
 - Pages that enforce Trusted Types or a strict CSP: it works, through both MCP servers. Code evaluated over the
   DevTools protocol is exempt from `script-src`, and the bundle has no Trusted Types sink.
-- The official-Markdown lookup requests `llms.txt` from the page's own site (three requests per run, plus the
-  page's `.md` twins where the policy allows them). In the main world they pass through the page's `fetch`
-  wrappers and its CSP: on a page with `connect-src 'none'` and a `report-uri`, each run sends three violation
-  reports to that site. The extension sends none.
+- It makes no network request: the content comes only from the page (BL-49). The build fails on any network
+  call in the bundle, and `.e2e/e2e-agent.mjs` serves an `llms.txt` and `.md` copies and requires that neither
+  world requests them and that no CSP report reaches the server. Builds from `main` before this change asked
+  the page's own site for `llms.txt` three times per run, through the page's `fetch` wrappers and its CSP: on a
+  page with `connect-src 'none'` and a `report-uri`, that was three violation reports per run.
 - It never writes to the console, which page scripts can read.
 - The page cannot replace `window.__page2aiAgent` once the init script has defined it, and the define script refuses
   to overwrite one that something else defined first. A page can still see that the name exists.

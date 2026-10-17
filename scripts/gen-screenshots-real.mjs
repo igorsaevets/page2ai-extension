@@ -90,13 +90,7 @@ function fmtProfile(p) {
   return m[p] || (p ? p[0].toUpperCase() + p.slice(1) : 'Auto');
 }
 
-function buildStatus(result) {
-  if (result.status === 'official-md') {
-    return {
-      tone: 'ok',
-      text: `Done — official Markdown used${result.officialMarkdownRatio ? ` (ratio ${result.officialMarkdownRatio.toFixed(2)})` : ''}`,
-    };
-  }
+function buildStatus() {
   return { tone: 'ok', text: 'Done — Markdown copied to clipboard' };
 }
 
@@ -104,8 +98,7 @@ function buildStats(result, mdChars) {
   const parts = [formatBytes(mdChars)];
   if (result.tabsCaptured) parts.push(`${result.tabsCaptured} tab${result.tabsCaptured === 1 ? '' : 's'} captured`);
   if (result.dropdownsCaptured) parts.push(`${result.dropdownsCaptured} dropdown${result.dropdownsCaptured === 1 ? '' : 's'}`);
-  if (result.status === 'official-md') parts.push('official-md');
-  else parts.push(String(result.profile || 'auto'));
+  parts.push(String(result.profile || 'auto'));
   if (result.quality && typeof result.quality.ratio === 'number') {
     parts.push(`ratio ${result.quality.ratio.toFixed(2)}`);
   }
@@ -130,7 +123,7 @@ function buildLog(result, progressLines) {
     if (!m) continue;
     const [, step, msg] = m;
     if (step === 'inject-error' || step === 'busy') continue;
-    if (step === 'start' || step === 'llmstxt' || step === 'main' || step === 'tabs' || step === 'done') {
+    if (step === 'start' || step === 'main' || step === 'tabs' || step === 'done') {
       push('info', `${step}: ${msg.slice(0, 90)}`);
     }
   }

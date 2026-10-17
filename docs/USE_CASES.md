@@ -84,7 +84,6 @@ Page2AI is an open-source (MIT) contribution to the US-anchored AI developer inf
 - WXT framework (open source, distributed via npm, MIT)
 - CommonMark specification (widely-adopted Markdown)
 - JSON-LD (W3C standard for structured metadata)
-- `llms.txt` proposal (community standard for LLM-consumable content)
 
 **3. Distributed via US-operated infrastructure:**
 - Chrome Web Store (Google). Extension discovery, install, update.
