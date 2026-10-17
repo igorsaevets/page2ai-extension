@@ -105,10 +105,10 @@ with the resubmission of 2026-09-07, after the keyword-spam rejection in section
 ---
 
 
-### Detailed description: change for the release after 1.4.0 (not in the dashboard yet)
+### Detailed description: change for 1.5.0 (not in the dashboard yet)
 
-The extension now takes the content only from the page (BL-49, Igor 2026-10-17), so two bullets of the live text
-above become false. When that release is live, change the Detailed description field in the same dashboard session:
+Since 1.5.0 the extension takes the content only from the page (BL-49, Igor 2026-10-17), so two bullets of the live
+text above are false for it. Change the Detailed description field in one dashboard session, once 1.5.0 is published:
 
 1. Delete the bullet that begins `• MDX / JSX post-processing`: the clean-up it describes ran only on the Markdown
    copies the extension no longer reads.
@@ -118,12 +118,14 @@ above become false. When that release is live, change the Detailed description f
 • Only the page you see — Page2AI converts the page in your tab and nothing else. It never swaps in the site's llms.txt or a Markdown copy, which can be older than the page.
 ````
 
-3. Screenshots 2 and 3 (section 2) show the popup's `official-md` status line. Replace them with new captures of the
-   same pages (`scripts/gen-screenshots-real.mjs`) before that version is submitted.
+3. Screenshots 2 and 3 in the dashboard show the popup's `official-md` status line, and all three show the label
+   v1.3.0. New captures of the same pages from the 1.5.0 build are in `assets/store/` (T139, by
+   `scripts/gen-screenshots-real.mjs`, which now takes the label from the built manifest). Upload them in the same
+   session, in the same order.
 
-The PRIVACY paragraph of the description stays as it is: it is true of that release. It was not complete for
-1.4.0, which asks the site for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do
-not quote it as a description of 1.4.0 (T136 panel, grokbuild).
+The PRIVACY paragraph of the description stays as it is: it is true of 1.5.0. It was not complete for 1.4.0,
+which asked the site for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do not
+quote it as a description of 1.4.0 (T136 panel, grokbuild).
 
 ## 2. Graphic assets
 
@@ -285,7 +287,8 @@ Skip for v1.0. Requires domain ownership via Google Search Console TXT record. O
 
 | Version | CHANGELOG date | On the Chrome Web Store |
 |---|---|---|
-| 1.4.0 | 2026-10-16 | Live; the listing says updated October 16, 2026. Uploaded and submitted from tag `v1.4.0` through the API |
+| 1.5.0 | 2026-10-17 | Published 2026-10-17 (UTC): Chrome's update service served 1.5.0 from 23:24Z, 31 min after the API submit; CRX = the release zip per entry. Uploaded and submitted from tag `v1.5.0` through the API |
+| 1.4.0 | 2026-10-16 | Published 2026-10-17 (UTC), served until 1.5.0. Uploaded and submitted from tag `v1.4.0` through the API |
 | 1.3.0 | 2026-07-27 | Published; served until 1.4.0 |
 | 1.2.0 | 2026-07-23 | Not recorded here |
 | 1.1.0 | 2026-07-22 | Not recorded here |
