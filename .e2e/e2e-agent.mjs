@@ -6,7 +6,10 @@
 //  /plain   — headings, ARIA tabs, a table, <details>, a list: the parity baseline.
 //  /tt      — Trusted Types enforced (require-trusted-types-for 'script'): no sink in the bundle, so it works.
 //  /csp     — a strict CSP (nonce scripts only, connect-src 'none', report-uri): CDP evaluation is exempt from
-//             script-src. Prints what the official-Markdown lookup's fetches cost there in each world.
+//             script-src.
+//  On /plain, /tt and /csp the server also offers what a lookup would find (/llms.txt, /llms-full.txt,
+//  /docs/llms.txt and a .md twin of every route), and neither world may request anything but the page itself:
+//  the content comes only from the page (T135, BL-49). No CSP report may reach the server either.
 //  /tamper  — page scripts wrap fetch and console and plant a fake window.__page2aiAgent before the agent runs:
 //             the agent never writes to the console, the define script refuses to overwrite, and the function
 //             form is not fooled.
@@ -134,7 +137,9 @@ for (const f of [path.join(EXT_PATH, 'manifest.json'), path.join(AGENT_DIR, 'pag
 const AGENT_FN = readFileSync(path.join(AGENT_DIR, 'page2ai-agent.fn.js'), 'utf8');
 const AGENT_DEFINE = readFileSync(path.join(AGENT_DIR, 'page2ai-agent.js'), 'utf8');
 
-const hits = { reports: 0, lookups: 0 };
+// Every request that is not a navigation to a route (nor the browser's own favicon request) is an extra request.
+const hits = { reports: 0, extra: [], all: [] };
+const TWIN_MARKER = 'TWIN_ONLY_MARKER_NOT_ON_THE_PAGE';
 const server = createServer((req, res) => {
   const u = new URL(req.url, 'http://127.0.0.1');
   if (u.pathname === '/csp-report') {
@@ -143,7 +148,18 @@ const server = createServer((req, res) => {
     res.statusCode = 204;
     return res.end();
   }
-  if (/\.md$|llms(-full)?\.txt$/.test(u.pathname)) hits.lookups++;
+  if (u.pathname !== '/favicon.ico' && !ROUTES[u.pathname]) {
+    hits.extra.push(u.pathname);
+    hits.all.push(u.pathname);
+  }
+  if (/^\/(?:docs\/)?llms(?:-full)?\.txt$/.test(u.pathname) || u.pathname.endsWith('.md')) {
+    // What a lookup would find: an index naming the twin, and a twin long enough to pass any size check.
+    const page = u.pathname.replace(/\.md$/, '');
+    res.setHeader('content-type', u.pathname.endsWith('.md') ? 'text/markdown; charset=utf-8' : 'text/plain; charset=utf-8');
+    return res.end(u.pathname.endsWith('.md')
+      ? `# Twin\n\n${TWIN_MARKER}\n\n${'Twin paragraph text. '.repeat(40)}\n`
+      : `# Fixture\n\n${Object.keys(ROUTES).map((r) => `- [${r}](http://${req.headers.host}${r}.md)`).join('\n')}\n`);
+  }
   const route = ROUTES[u.pathname];
   res.setHeader('content-type', 'text/html; charset=utf-8');
   if (route?.csp) res.setHeader('content-security-policy', route.csp);
@@ -224,19 +240,24 @@ try {
   // 1. Parity on every route the extension can reach, plus what each world costs on the page.
   for (const route of ['/plain', '/tt', '/csp']) {
     hits.reports = 0;
-    hits.lookups = 0;
+    hits.extra = [];
     const ext = await extractExtension(tab, sw, base + route);
+    await new Promise((r) => setTimeout(r, 300)); // let report-uri POSTs land
     const extC = await counters(tab);
-    const extHits = { ...hits };
+    const extHits = { reports: hits.reports, extra: [...hits.extra] };
     hits.reports = 0;
-    hits.lookups = 0;
+    hits.extra = [];
     const agent = await extractAgent(tab, base + route);
     await new Promise((r) => setTimeout(r, 300)); // let report-uri POSTs land
     const agC = await counters(tab);
+    check(`${route}: the extension requests nothing but the page`, extHits.extra.length === 0, extHits.extra.join(' '));
+    check(`${route}: the agent requests nothing but the page`, hits.extra.length === 0, hits.extra.join(' '));
+    check(`${route}: no CSP report from either world`, extHits.reports === 0 && hits.reports === 0, `extension ${extHits.reports}, agent ${hits.reports}`);
+    check(`${route}: neither output holds the twin's text`, !ext.markdown.includes(TWIN_MARKER) && !agent.markdown.includes(TWIN_MARKER));
     check(`${route}: agent status ok`, agent.status === 'ok', `status=${agent.status}`);
     check(`${route}: agent output has every marker`, missing(agent.markdown).length === 0, missing(agent.markdown).join(', '));
     check(`${route}: agent Markdown equals the extension's`, norm(agent.markdown) === norm(ext.markdown), firstDiff(ext.markdown, agent.markdown));
-    info(`${route}: page cost`, `extension: ${extHits.lookups} lookups reached the server, ${extC.violations} CSP violations in the page, ${extHits.reports} reports; agent: ${hits.lookups} lookups, ${agC.violations} violations, ${hits.reports} reports`);
+    info(`${route}: CSP violations in the page`, `extension ${extC.violations}, agent ${agC.violations}`);
     if (route === '/tt') check('/tt: no Trusted Types violation from the agent', agC.violations === 0, `violations=${agC.violations}`);
   }
 
@@ -249,7 +270,7 @@ try {
     check('/tamper: the function form is not fooled by a planted window.__page2aiAgent', !agent.markdown.includes('FAKE_FROM_PAGE') && missing(agent.markdown).length === 0);
     check('/tamper: the agent never calls the console', agC.consoleCalls === 0, `calls=${agC.consoleCalls}`);
     check('/tamper: agent Markdown equals the extension\'s', norm(agent.markdown) === norm(ext.markdown), firstDiff(ext.markdown, agent.markdown));
-    info('/tamper: fetches the page\'s own wrapper saw', `extension ${extC.fetchSeen}, agent ${agC.fetchSeen}`);
+    check('/tamper: the page\'s own fetch wrapper saw no call from either world', extC.fetchSeen === 0 && agC.fetchSeen === 0, `extension ${extC.fetchSeen}, agent ${agC.fetchSeen}`);
     await tab.goto(`${base}/tamper`, { waitUntil: 'load' });
     let refused = '';
     try {
@@ -286,6 +307,9 @@ try {
     check('/state: the agent never called the page\'s __NUXT__', nuxtCalls === 0, `calls=${nuxtCalls}`);
     check('/state: agent Markdown equals the extension\'s', norm(agent.markdown) === norm(ext.markdown), firstDiff(ext.markdown, agent.markdown));
   }
+
+  // 5. Over the whole run, on every route and in both worlds: no request but the pages themselves.
+  check('whole run: no request but the pages themselves', hits.all.length === 0, [...new Set(hits.all)].join(' '));
 } catch (e) {
   check('suite ran to completion', false, String(e && e.stack ? e.stack : e).slice(0, 400));
 } finally {

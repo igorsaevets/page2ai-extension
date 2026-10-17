@@ -1,5 +1,6 @@
-// Extraction orchestrator: page preparation, official-markdown short path,
-// tab/dropdown capture, main render, post-processing and quality reporting.
+// Extraction orchestrator: page preparation, tab/dropdown capture, main render,
+// post-processing and quality reporting. The content comes only from the page
+// in the tab: no request goes out (no llms.txt, no .md twin; T135, BL-49).
 // Ported from Rev-032v2 prototype (Sections 14, 25, 37-39, 41).
 // Unlike the prototype (DevTools script that downloaded a file), this returns
 // an ExtractResult; the extension shell decides clipboard vs download.
@@ -21,13 +22,7 @@ import {
 } from './dom';
 import { deriveFlags, resolveConfig } from './profiles';
 import { renderNode } from './html-to-md';
-import {
-  dedupeConsecutiveDuplicateLines,
-  normalizeMarkdownPreserveCode,
-  postProcessMarkdown,
-} from './md-postprocess';
-import { convertMdxToMarkdown } from './mdx-processor';
-import { fetchOfficialMd } from './llms-txt';
+import { normalizeMarkdownPreserveCode, postProcessMarkdown } from './md-postprocess';
 import { waitForSpaContentReady } from './spa-readiness';
 import { extractDropdownPanels, extractTabPanels } from './tab-handler';
 import {
@@ -442,21 +437,6 @@ export const buildAppendix = (ctx: ExtractContext): string[] => {
 export const buildFilename = (config: ResolvedConfig): string =>
   `${slugify(document.title)}.${config.fileExtension}`;
 
-// #8: the official-markdown short path prepends the same synthetic title
-// heading, and official mirrors routinely open with their own identical H1.
-// Drop the mirror's leading heading when its normalized text equals the title.
-// Only a heading on the first non-blank line qualifies; anything else — other
-// text, a different title, markdown the mirror escaped differently — is kept.
-const dropLeadingDuplicateTitleHeading = (md: string, title: string): string => {
-  if (!title) return md;
-  const lines = md.split('\n');
-  let i = 0;
-  while (i < lines.length && !lines[i]!.trim()) i++;
-  const m = i < lines.length ? /^#{1,6}\s+(.+)$/.exec(lines[i]!.trim()) : null;
-  if (!m || cleanInline(m[1]) !== title) return md;
-  return lines.slice(i + 1).join('\n');
-};
-
 // --- Main pipeline (Section 41) ---
 
 export const runExtractor = async (
@@ -482,49 +462,6 @@ export const runExtractor = async (
     expandDetailsElementsSafely(ctx);
     await sleep(80);
     state.baselineBodyText = cleanBlock(document.body.innerText || document.body.textContent || '');
-
-    const officialMd = await fetchOfficialMd(config, progress);
-    let officialSupp: { url: string; markdown: string; ratio: number } | null = null;
-    if (officialMd) {
-      const ratio =
-        state.baselineBodyText.length > 0
-          ? officialMd.markdown.length / state.baselineBodyText.length
-          : 1;
-      if (ratio >= config.officialMarkdownMinRatio) {
-        // Convert MDX components to clean Markdown before output.
-        const cleanedMd = dropLeadingDuplicateTitleHeading(
-          convertMdxToMarkdown(officialMd.markdown),
-          cleanInline(document.title),
-        );
-        const md = normalizeMarkdownPreserveCode(
-          dedupeConsecutiveDuplicateLines(
-            [
-              ...buildFrontmatter(ctx, {
-                official_markdown_source: officialMd.url,
-                official_markdown_ratio: ratio.toFixed(3),
-              }),
-              `# ${cleanInline(document.title) || 'Untitled page'}`,
-              '',
-              cleanedMd,
-            ].join('\n'),
-            config,
-          ),
-        );
-        progress('official-md', `using official markdown (ratio=${ratio.toFixed(3)})`);
-        return {
-          status: 'official-md',
-          markdown: md,
-          filename: buildFilename(config),
-          profile: config.activeProfile,
-          officialMarkdownUrl: officialMd.url,
-          officialMarkdownRatio: ratio,
-          spaReadiness,
-          tabsCaptured: 0,
-          dropdownsCaptured: 0,
-        };
-      }
-      officialSupp = { ...officialMd, ratio };
-    }
 
     await activateLazyLoad(ctx);
     resetComputedStyleCache();
@@ -572,16 +509,6 @@ export const runExtractor = async (
     composed.push('<!-- AI: PAGE CONTENT START -->', '', ...bodyLines, '', '<!-- AI: PAGE CONTENT END -->', '');
     if (vtf.length) composed.push(...vtf);
     if (nsf.length) composed.push(...nsf);
-    if (officialSupp) {
-      composed.push(
-        '',
-        `<!-- AI: SUPPLEMENTAL OFFICIAL MARKDOWN (ratio=${officialSupp.ratio.toFixed(3)}) -->`,
-        `<!-- source: ${officialSupp.url} -->`,
-        '',
-        convertMdxToMarkdown(officialSupp.markdown),
-        '',
-      );
-    }
     if (apx.length) composed.push(...apx);
     if (config.structuredDataPosition === 'after-content' && sdLines.length) {
       composed.push(...sdLines);
@@ -623,7 +550,6 @@ export const runExtractor = async (
       spaReadiness,
       tabsCaptured: state.tabPanelsByButtonId.size,
       dropdownsCaptured: state.dropdownPanelsByButtonId.size,
-      ...(officialSupp ? { officialMarkdownUrl: officialSupp.url, officialMarkdownRatio: officialSupp.ratio } : {}),
     };
   } catch (error) {
     const err = error as Error;

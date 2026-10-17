@@ -85,9 +85,6 @@ const describeResult = (r: ExtractResult): string => {
   const parts = [`profile: ${r.profile}`, `${formatChars(r.markdown.length)} chars`];
   if (r.tabsCaptured) parts.push(`${r.tabsCaptured} tabs`);
   if (r.dropdownsCaptured) parts.push(`${r.dropdownsCaptured} dropdowns`);
-  if (r.status === 'official-md' && r.officialMarkdownRatio != null) {
-    parts.push(`official llms.txt markdown (ratio ${r.officialMarkdownRatio.toFixed(2)})`);
-  }
   if (r.quality) parts.push(`quality: ${r.quality.ratioStatus} (${r.quality.ratio.toFixed(2)})`);
   return parts.join(' · ');
 };

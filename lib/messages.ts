@@ -21,7 +21,7 @@ export interface ProgressMessage {
   tabId?: number;
 }
 
-/** extractor → popup/background: extraction finished (ok, official-md or fallback). */
+/** extractor → popup/background: extraction finished (ok or fallback). */
 export interface ResultMessage {
   type: 'PAGE2AI_RESULT';
   result: ExtractResult;
