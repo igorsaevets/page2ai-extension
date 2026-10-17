@@ -121,7 +121,7 @@ cmd_attach() {
   done
   json=$(gh api "repos/$REPO/releases/tags/$tag")
   for f in "${FILES[@]}"; do
-    digest=$(jqr --arg n "$f" '.assets[] | select(.name == $n) | .digest // empty' <<<"$json")
+    digest=$(jq -r --arg n "$f" '.assets[] | select(.name == $n) | .digest // empty' <<<"$json" | tr -d '\r')
     [ -z "$digest" ] || [ "$digest" = "sha256:$(sha256_of "$dir/$f")" ] || die "attach: GitHub's digest of $f on $tag is not the build's"
   done
   echo "attach: OK, $tag carries ${FILES[*]} of build $version; downloaded back from the release and checked"
