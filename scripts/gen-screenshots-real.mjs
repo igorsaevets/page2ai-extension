@@ -19,6 +19,9 @@ import sharp from 'sharp';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const EXT_PATH = path.resolve(root, '.output/chrome-mv3-real-test');
+// The popup header shows the version of the build that ran. It was the literal "v1.3.0" until T139, so the 1.5.0
+// captures said 1.3.0.
+const EXT_VERSION = JSON.parse(await readFile(path.resolve(EXT_PATH, 'manifest.json'), 'utf8')).version;
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -152,7 +155,7 @@ ${popupCss}
       <div class="brand">
         <span class="logo" aria-hidden="true">M&darr;</span>
         <h1>Page2AI</h1>
-        <span class="version">v1.3.0</span>
+        <span class="version">v${escapeHtml(EXT_VERSION)}</span>
       </div>
       <div class="page-host" title="${escapeHtml(pageHost)}">${escapeHtml(pageHost)}</div>
     </header>
