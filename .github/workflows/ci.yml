@@ -37,6 +37,10 @@ jobs:
 
       - name: Build (Chrome MV3)
         run: npm run build
+      # The agent script (BL-45 C): fails on an extension API, eval, a Trusted Types sink, a console call
+      # or a new network call in the bundle (scripts/build-agent.mjs).
+      - name: Build the agent script
+        run: npm run build:agent
 
   e2e:
     name: End-to-end (real Chrome)
@@ -70,6 +74,8 @@ jobs:
 
       - name: Build (e2e mode)
         run: npx wxt build --mode e2e
+      - name: Build the agent script
+        run: npm run build:agent
 
       - name: Smoke suite
         env:
@@ -104,6 +110,15 @@ jobs:
       - name: Tab-panels suite
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-tab-panels.mjs
+      - name: Agent script suite (parity with the extension, CSP, Trusted Types, page tampering)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-agent.mjs
+      - name: Tab-panels suite, run by the agent script (never-click list in the main world)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          PAGE2AI_E2E_TARGET: agent
         run: xvfb-run -a node .e2e/e2e-tab-panels.mjs
 
   cws-client:
