@@ -157,41 +157,17 @@ export const extractInternalStateBlock = (
   config: Pick<ResolvedConfig, 'extractInternalState' | 'internalStateMaskingEnabled'>,
 ): string[] => {
   if (!config.extractInternalState) return [];
+  // Only the state a page carries in its DOM. JS globals a page script defines (__NUXT__, __INITIAL_STATE__,
+  // __REDUX_STATE__) never existed for the extension: Chrome runs it in an isolated world and Firefox through Xray
+  // wrappers, so reading them was dead code there (e2e-agent.mjs /state proves it on the extension build). The
+  // agent script runs in the page's main world, where the same reads would serialize the app's live state and
+  // call the page's own __NUXT__ function; one rule for both is the DOM.
   const collected: Record<string, unknown> = {};
-  const w = window as unknown as Record<string, unknown>;
   try {
     const nd = document.getElementById('__NEXT_DATA__');
-    if (nd) {
-      try {
-        collected.__NEXT_DATA__ = JSON.parse(nd.textContent || '');
-      } catch {
-        // unparseable __NEXT_DATA__
-      }
-    }
-    if (typeof w.__NUXT__ !== 'undefined') {
-      try {
-        const n = typeof w.__NUXT__ === 'function' ? (w.__NUXT__ as () => unknown)() : w.__NUXT__;
-        collected.__NUXT__ = JSON.parse(JSON.stringify(n));
-      } catch {
-        // non-serializable __NUXT__
-      }
-    }
-    if (typeof w.__INITIAL_STATE__ !== 'undefined') {
-      try {
-        collected.__INITIAL_STATE__ = JSON.parse(JSON.stringify(w.__INITIAL_STATE__));
-      } catch {
-        // non-serializable __INITIAL_STATE__
-      }
-    }
-    if (typeof w.__REDUX_STATE__ !== 'undefined') {
-      try {
-        collected.__REDUX_STATE__ = JSON.parse(JSON.stringify(w.__REDUX_STATE__));
-      } catch {
-        // non-serializable __REDUX_STATE__
-      }
-    }
+    if (nd) collected.__NEXT_DATA__ = JSON.parse(nd.textContent || '');
   } catch {
-    // internal state collection failed entirely
+    // unparseable __NEXT_DATA__
   }
   if (!Object.keys(collected).length) return [];
   return [

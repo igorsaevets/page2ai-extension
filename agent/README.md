@@ -1,0 +1,64 @@
+# Page2AI agent script
+
+The Page2AI extension's own extractor as a plain page script, for AI agents that open pages through a browser
+automation tool. The agent gets the Markdown the popup would give, also on pages behind a sign-in that a
+fetch-based tool cannot reach, and only the Markdown lands on disk, never the raw page.
+
+## Build
+
+    npm ci
+    npm run build:agent
+
+`.output/agent/` then holds:
+
+| File | Shape | For |
+|---|---|---|
+| `page2ai-agent.fn.js` | an async function expression that extracts and returns the result; defines nothing | Chrome DevTools MCP `evaluate_script` with `sourcePath` |
+| `page2ai-agent.js` | a classic script that defines `window.__page2aiAgent = { version, extract(options) }`, frozen, non-enumerable, non-configurable | Playwright MCP `--init-script` |
+| `SHA256SUMS` | checksums of both | `sha256sum -c SHA256SUMS` |
+
+The build fails if the bundle contains an extension API, `eval`, a Trusted Types sink, a console call, or a network
+call other than the two `fetch` calls of the official-Markdown lookup. The code is not minified, so it can be read
+before it is run.
+
+## Use
+
+**Chrome DevTools MCP** (`chrome-devtools-mcp`): call `evaluate_script` with `sourcePath` set to the absolute path of
+`page2ai-agent.fn.js` and `filePath` set to where the result should go. The server writes `JSON.stringify(result)`
+and always replaces the file extension with `.json`. Both paths must be inside the client's MCP roots or a
+`--filesystemRoot` directory. For a profile, run `page2ai-agent.js` once with `format: "script"`, then call
+`evaluate_script` with `function: "() => __page2aiAgent.extract({ profile: 'docs' })"` and `filePath`.
+
+**Playwright MCP** (`@playwright/mcp`): start the server with `--init-script /path/to/page2ai-agent.js`, then call
+`browser_evaluate` with `function: "() => __page2aiAgent.extract()"` and `filename`. Relative file names resolve
+against the workspace root, and the file must stay inside it.
+
+**The result** is one JSON object: `markdown`, `status` (`ok`, `official-md`, ...), `title`, `url`, `profile`,
+`filename`, `page2ai` (the build), `log` (the progress lines the popup shows) and the extractor's counters.
+To get the Markdown alone: `jq -r .markdown result.json > page.md`.
+
+## What it does to the page, measured
+
+The script runs in the page's main world, next to the page's own scripts. The extension runs in an isolated world.
+`.e2e/e2e-agent.mjs` extracts each test page both ways and requires equal Markdown; `.e2e/e2e-tab-panels.mjs` with
+`PAGE2AI_E2E_TARGET=agent` runs the never-click checks through the script.
+
+- Pages that enforce Trusted Types or a strict CSP: it works, through both MCP servers. Code evaluated over the
+  DevTools protocol is exempt from `script-src`, and the bundle has no Trusted Types sink.
+- The official-Markdown lookup requests `llms.txt` from the page's own site (three requests per run, plus the
+  page's `.md` twins where the policy allows them). In the main world they pass through the page's `fetch`
+  wrappers and its CSP: on a page with `connect-src 'none'` and a `report-uri`, each run sends three violation
+  reports to that site. The extension sends none.
+- It never writes to the console, which page scripts can read.
+- The page cannot replace `window.__page2aiAgent` once the init script has defined it, and the define script refuses
+  to overwrite one that something else defined first. A page can still see that the name exists.
+- Chrome DevTools MCP serializes the result with the page's own `JSON.stringify`. A page that replaces it controls
+  what is written to the file. An old `Array.prototype.toJSON` (Prototype.js) turns `log` into a string, while
+  `markdown` survives. Playwright MCP serializes outside the page and is not affected.
+- Page state comes only from the DOM (`__NEXT_DATA__`). JS globals such as `__NUXT__` are never read or called,
+  which is also all the extension could ever see.
+
+## Where to get it
+
+For now, build it from this repository. Attaching the three files to GitHub Releases is planned. Check the
+checksum before use: the script runs with the page's privileges, on signed-in pages too.

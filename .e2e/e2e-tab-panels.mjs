@@ -42,14 +42,20 @@
 // Run:  npm i --no-save puppeteer-core
 //       npx wxt build --mode e2e
 //       node .e2e/e2e-tab-panels.mjs
+//
+// PAGE2AI_E2E_TARGET=agent runs every check against the agent script instead (npm run build:agent first):
+// .output/agent/page2ai-agent.fn.js, evaluated in the page's main world the way Chrome DevTools MCP does.
+// Same extractor, no extension API; the never-click checks must hold there too (BL-45).
 
 import { createServer } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import puppeteer from 'puppeteer-core';
 
 const EXT_PATH = path.resolve('.output/chrome-mv3-e2e');
+const TARGET = process.env.PAGE2AI_E2E_TARGET === 'agent' ? 'agent' : 'extension';
+const AGENT_FN = TARGET === 'agent' ? readFileSync(path.resolve('.output/agent/page2ai-agent.fn.js'), 'utf8') : '';
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -447,7 +453,7 @@ const server = createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
-console.log(`fixture server: http://127.0.0.1:${port}`);
+console.log(`fixture server: http://127.0.0.1:${port}; target: ${TARGET}`);
 
 async function launch(headless) {
   return puppeteer.launch({
@@ -469,6 +475,12 @@ try {
 
 async function extract(browserPage, sw, url, options = {}) {
   await browserPage.goto(url, { waitUntil: 'load' });
+  if (TARGET === 'agent') {
+    const r = await browserPage.evaluate(`(${AGENT_FN})(${JSON.stringify(options)})`);
+    // Only the agent script stamps its build; without it this suite would be testing something else.
+    if (!r || typeof r.page2ai !== 'string' || !Array.isArray(r.log)) throw new Error('agent script returned no Page2AI result');
+    return r;
+  }
   const tabId = await sw.evaluate(async (u) => {
     const tabs = await chrome.tabs.query({});
     return tabs.find((t) => (t.url || '') === u)?.id ?? null;
