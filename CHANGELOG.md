@@ -6,14 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-17
+
 ### Removed
 
 - **The official-Markdown lookup: Page2AI now takes the content only from the page** (BL-49). Up to 1.4.0 every extraction asked the site for `/llms.txt`, `/docs/llms.txt` and `/llms-full.txt`, and could return the page's `.md` copy instead of the page or append it below the page; such copies are often older than the page. The extension and the agent script now make no network request; the page may still load its own content when the extension scrolls it or opens its tabs, as when you do. `.e2e/e2e-agent.mjs` and `.e2e/e2e-title-dedupe.mjs` serve an `llms.txt` and `.md` copies and require that neither world requests them. In `.e2e/e2e-agent.mjs` every route also answers a Markdown Accept header with its copy, a request for a route that is not a navigation counts as extra, and a control at the start makes such a request and requires the server to count it. The agent build fails if the bundle uses a browser network API (`fetch` in any spelling, `WebSocket`, `WebTransport`, workers and the rest) or anything else that makes the browser load an address: an element it creates or points at a URL, a navigation, a global reached by a computed name, a copy made in the page's document (T136 panel: `globalThis['fetch'](url)` passed the first version). Gone with it: the `official-md` status, the `officialMarkdownMode`, `trustedOfficialMarkdownHosts` and `officialMarkdownMinRatio` options, and the MDX clean-up that ran only on those copies. [PRIVACY.md](PRIVACY.md) describes both versions.
+
+### Fixed
+
 - **Copies of a part of the page load nothing.** To read a tab's label, and the text around a group of tabs, the extractor copied that part of the page with `cloneNode(true)`, in the page's own document. Chrome then fetched the lazy images in the copy that the page had not loaded yet and requested its video and audio again: 3 requests in a headless Chrome check against a no-store server, 1.4.0 included. Copies are now made in a separate document with no browsing context (`inertCopy` in `lib/core/dom.ts`): 0 requests and the same text.
 
 ### Added
 
 - **Agent script: the extension's extractor as a page script, for AI agents that open pages through a browser automation tool** ([agent/README.md](agent/README.md)). `npm run build:agent` builds it in two shapes, for Chrome DevTools MCP (`evaluate_script` with `sourcePath`) and for Playwright MCP (`--init-script`), and the Markdown equals the popup's, on signed-in pages too. From this release on, `page2ai-agent.js`, `page2ai-agent.fn.js` and their `page2ai-agent.SHA256SUMS` are attached to every GitHub Release, built from the tag.
+
+[1.5.0]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.5.0
 
 ## [1.4.0] - 2026-10-16
 
