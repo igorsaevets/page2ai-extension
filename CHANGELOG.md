@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- **The official-Markdown lookup: Page2AI now takes the content only from the page** (BL-49). Up to 1.4.0 every extraction asked the site for `/llms.txt`, `/docs/llms.txt` and `/llms-full.txt`, and could return the page's `.md` copy instead of the page or append it below the page; such copies are often older than the page. The extension and the agent script now make no network request. `.e2e/e2e-agent.mjs` and `.e2e/e2e-title-dedupe.mjs` serve an `llms.txt` and `.md` copies and require that neither world requests them, and the agent build fails on any network call. Gone with it: the `official-md` status, the `officialMarkdownMode`, `trustedOfficialMarkdownHosts` and `officialMarkdownMinRatio` options, and the MDX clean-up that ran only on those copies. [PRIVACY.md](PRIVACY.md) describes both versions.
+
 ### Added
 
 - **Agent script: the extension's extractor as a page script, for AI agents that open pages through a browser automation tool** ([agent/README.md](agent/README.md)). `npm run build:agent` builds it in two shapes, for Chrome DevTools MCP (`evaluate_script` with `sourcePath`) and for Playwright MCP (`--init-script`), and the Markdown equals the popup's, on signed-in pages too. From this release on, `page2ai-agent.js`, `page2ai-agent.fn.js` and their `page2ai-agent.SHA256SUMS` are attached to every GitHub Release, built from the tag.

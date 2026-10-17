@@ -1,7 +1,7 @@
 # Privacy Policy: Page2AI
 
 **Effective date:** 2026-07-20
-**Last updated:** 2026-07-20
+**Last updated:** 2026-10-17
 
 ## Summary
 
@@ -35,21 +35,24 @@ Page2AI converts this content into Markdown text on your machine and:
 
 No content is transmitted to any server operated by Page2AI, the publisher, or any third party.
 
-## The one network request Page2AI makes
+## Network requests
 
-Many documentation sites publish a machine-readable Markdown copy of each page. When you invoke the
-extension it looks for one on **the site you are already reading, and only that site**: it requests
-`/llms.txt`, `/docs/llms.txt` and `/llms-full.txt` on the current origin, and if that index names a
-Markdown file for the page you are on, it requests that file too. Using the site's own Markdown
-gives a better result than converting rendered HTML.
+**From the release after 1.4.0, Page2AI makes no network request.** It reads only the page in your tab. It no
+longer asks the site for an `llms.txt` index or for a Markdown copy of the page, because such a copy can be older
+than the page or differ from it. The agent script built from the same code makes none either, and its build fails
+if a network call appears in it ([`scripts/build-agent.mjs`](scripts/build-agent.mjs)).
 
-These are same-origin requests issued from the page itself, so they carry your normal cookies for
-that site, exactly as following a link on it would. The extension declares no `host_permissions`,
-so the browser will not let it reach any other origin. Nothing about you or the page is sent to the
-author or to any third party at any point.
+To capture content the page shows only on demand, the extension scrolls the page and opens its tabs and collapsed
+sections, as you would. The page may then load its own content from its own servers, exactly as when you scroll or
+click it yourself. Those requests come from the page, not from Page2AI.
 
-To switch it off, set **Official Markdown** to `never` in the popup. Source:
-[`lib/core/llms-txt.ts`](lib/core/llms-txt.ts).
+**Version 1.4.0 and earlier** made these requests each time you invoked the extension: `/llms.txt`,
+`/docs/llms.txt` and `/llms-full.txt` on the site you were reading and, where the page had one, its `.md` copy on
+that site or on one of ten documentation hosts (`developers.openai.com`, `platform.openai.com`,
+`platform.claude.com`, `docs.anthropic.com`, `code.claude.com`, `docs.github.com`, `docs.vercel.com`,
+`supabase.com`, `docs.stripe.com`, `langchain-ai.github.io`). Requests to the site you were reading carried your
+cookies for it, as following a link on it does; requests to another host carried none. Nothing about you or the
+page was sent to the author or to any third party, and no setting turned these requests off.
 
 ## What data Page2AI stores
 
