@@ -9,7 +9,11 @@
 //             script-src.
 //  On /plain, /tt and /csp the server also offers what a lookup would find (/llms.txt, /llms-full.txt,
 //  /docs/llms.txt and a .md twin of every route), and neither world may request anything but the page itself:
-//  the content comes only from the page (T135, BL-49). No CSP report may reach the server either.
+//  the content comes only from the page (T135, BL-49). No CSP report may reach the server either. Every route
+//  also negotiates like a docs platform (Markdown to an Accept header that names it or puts text/plain first),
+//  and a request for a route that is not a navigation counts as extra: a lookup that fetched the page again
+//  asking for Markdown passed the T136 version unseen (T136 panel, grokbuild). A control at the start makes
+//  exactly that request from the page and requires the server to count it.
 //  /tamper  — page scripts wrap fetch and console and plant a fake window.__page2aiAgent before the agent runs:
 //             the agent never writes to the console, the define script refuses to overwrite, and the function
 //             form is not fooled.
@@ -137,9 +141,11 @@ for (const f of [path.join(EXT_PATH, 'manifest.json'), path.join(AGENT_DIR, 'pag
 const AGENT_FN = readFileSync(path.join(AGENT_DIR, 'page2ai-agent.fn.js'), 'utf8');
 const AGENT_DEFINE = readFileSync(path.join(AGENT_DIR, 'page2ai-agent.js'), 'utf8');
 
-// Every request that is not a navigation to a route (nor the browser's own favicon request) is an extra request.
+// Every request that is not a navigation to a route (nor the browser's own favicon request) is an extra request,
+// including a request for a route made by a script (Sec-Fetch-Mode other than navigate).
 const hits = { reports: 0, extra: [], all: [] };
 const TWIN_MARKER = 'TWIN_ONLY_MARKER_NOT_ON_THE_PAGE';
+const TWIN = `# Twin\n\n${TWIN_MARKER}\n\n${'Twin paragraph text. '.repeat(40)}\n`;
 const server = createServer((req, res) => {
   const u = new URL(req.url, 'http://127.0.0.1');
   if (u.pathname === '/csp-report') {
@@ -148,19 +154,26 @@ const server = createServer((req, res) => {
     res.statusCode = 204;
     return res.end();
   }
-  if (u.pathname !== '/favicon.ico' && !ROUTES[u.pathname]) {
-    hits.extra.push(u.pathname);
+  const mode = req.headers['sec-fetch-mode'] || 'none';
+  if (u.pathname !== '/favicon.ico' && (!ROUTES[u.pathname] || mode !== 'navigate')) {
+    hits.extra.push(ROUTES[u.pathname] ? `${u.pathname} (sec-fetch-mode ${mode})` : u.pathname);
     hits.all.push(u.pathname);
   }
   if (/^\/(?:docs\/)?llms(?:-full)?\.txt$/.test(u.pathname) || u.pathname.endsWith('.md')) {
     // What a lookup would find: an index naming the twin, and a twin long enough to pass any size check.
-    const page = u.pathname.replace(/\.md$/, '');
     res.setHeader('content-type', u.pathname.endsWith('.md') ? 'text/markdown; charset=utf-8' : 'text/plain; charset=utf-8');
     return res.end(u.pathname.endsWith('.md')
-      ? `# Twin\n\n${TWIN_MARKER}\n\n${'Twin paragraph text. '.repeat(40)}\n`
+      ? TWIN
       : `# Fixture\n\n${Object.keys(ROUTES).map((r) => `- [${r}](http://${req.headers.host}${r}.md)`).join('\n')}\n`);
   }
   const route = ROUTES[u.pathname];
+  // The route negotiates like a docs platform: its Markdown copy to a request that names Markdown or asks for
+  // text/plain first. A browser navigation does neither.
+  const accept = String(req.headers.accept || '');
+  if (route && (/markdown/i.test(accept) || /^\s*text\/plain/i.test(accept))) {
+    res.setHeader('content-type', 'text/markdown; charset=utf-8');
+    return res.end(TWIN);
+  }
   res.setHeader('content-type', 'text/html; charset=utf-8');
   if (route?.csp) res.setHeader('content-security-policy', route.csp);
   res.statusCode = route ? 200 : 404;
@@ -236,6 +249,19 @@ try {
   const swTarget = await browser.waitForTarget((t) => t.type() === 'service_worker' && t.url().endsWith('background.js'), { timeout: 20000 });
   const sw = await swTarget.worker();
   check('service worker target found', Boolean(sw), swTarget.url());
+
+  // 0. Control on every run: the page fetched again by a script with a Markdown Accept header is counted as an
+  // extra request and answered with the twin, so a lookup by content negotiation cannot pass unseen.
+  {
+    await tab.goto(`${base}/plain`, { waitUntil: 'load' });
+    hits.extra = [];
+    const body = await tab.evaluate(async () => (await fetch(location.href, { headers: { accept: 'text/markdown' } })).text());
+    check('control: a script that fetches the page again is counted', hits.extra.length === 1, hits.extra.join(' ') || 'nothing counted');
+    check('control: and the page answers it with the twin', body.includes(TWIN_MARKER));
+    hits.extra = [];
+    hits.all = [];
+    hits.reports = 0;
+  }
 
   // 1. Parity on every route the extension can reach, plus what each world costs on the page.
   for (const route of ['/plain', '/tt', '/csp']) {

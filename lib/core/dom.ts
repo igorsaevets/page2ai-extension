@@ -308,8 +308,19 @@ export const getOwnText = (el: Element): string =>
     .filter(Boolean)
     .join(' ');
 
+// A copy of a page node made in a document of its own, which has no browsing context, so the browser loads
+// nothing for it. node.cloneNode(true) puts the copy in the page's own document, and Chrome then fetches a lazy
+// image the page has not loaded yet and requests the page's video and audio again (T137, Chrome headless,
+// no-store server: 3 requests for such a copy, 0 for this one, and the same innerText). The extension and the
+// agent script make no network request, and that includes requests the browser makes for their copies.
+let inertDoc: Document | null = null;
+export const inertCopy = <T extends Node>(node: T): T => {
+  inertDoc ??= document.implementation.createHTMLDocument('');
+  return inertDoc.importNode(node, true);
+};
+
 export const getButtonText = (btn: Element): string => {
-  const c = btn.cloneNode(true) as HTMLElement;
+  const c = inertCopy(btn) as unknown as HTMLElement;
   c.querySelectorAll('svg, path').forEach((n) => n.remove());
   return cleanInline(
     c.innerText ||

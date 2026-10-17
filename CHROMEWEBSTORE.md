@@ -121,7 +121,9 @@ above become false. When that release is live, change the Detailed description f
 3. Screenshots 2 and 3 (section 2) show the popup's `official-md` status line. Replace them with new captures of the
    same pages (`scripts/gen-screenshots-real.mjs`) before that version is submitted.
 
-The PRIVACY paragraph of the description stays as it is: it was true before and is still true.
+The PRIVACY paragraph of the description stays as it is: it is true of that release. It was not complete for
+1.4.0, which asks the site for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do
+not quote it as a description of 1.4.0 (T136 panel, grokbuild).
 
 ## 2. Graphic assets
 

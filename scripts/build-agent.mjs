@@ -8,8 +8,12 @@
 //   page2ai-agent.SHA256SUMS  checksums of both, in `sha256sum -c` format. Named for the script, not bare
 //                        SHA256SUMS: on a GitHub Release it sits next to the Chrome zip, which it does not cover.
 //
-// The build fails when the bundle contains an extension API, a Trusted Types sink, eval, any network API (fetch
-// included: the content comes only from the page, T135 / BL-49), a console call, or a module statement.
+// The build fails when the bundle contains an extension API, a Trusted Types sink, eval, a network API (fetch
+// included: the content comes only from the page, T135 / BL-49), something else that makes the browser load an
+// address (an element it creates or points at a URL, a navigation, a computed global such as globalThis['fe'+'tch']),
+// a console call, or a module statement. These are static checks for code that WE write, a tripwire against an
+// honest regression, not a sandbox: `.e2e/e2e-agent.mjs` is the proof at run time that neither world requests
+// anything but the page. The T136 panel showed `globalThis['fetch'](url)` passing the first version of the gate.
 //
 // Run: npm run build:agent
 
@@ -89,7 +93,16 @@ const FORBIDDEN = [
   ['extension API', /\b(?:chrome|browser)\s*\.\s*(?:runtime|storage|scripting|tabs|downloads|action|i18n|permissions|management|alarms|contextMenus|identity|webRequest|declarativeNetRequest|offscreen|sidePanel)\b/],
   ['eval / Function constructor', /\beval\s*\(|\bnew\s+Function\s*\(|\bFunction\s*\(\s*['"`]/],
   ['Trusted Types sink', /\.(?:innerHTML|outerHTML)\s*=(?!=)|insertAdjacentHTML|document\.write|\bDOMParser\b|createContextualFragment|\bsrcdoc\b|setHTMLUnsafe|parseHTMLUnsafe/],
-  ['network API', /\bfetch\s*\(|\bXMLHttpRequest\b|\bsendBeacon\b|\bnew\s+WebSocket\b|\bEventSource\b|\bimportScripts\b|\bRTCPeerConnection\b/],
+  // Any mention of fetch, called, read as a property or spelled as a string, and every other request API.
+  ['network API', /\bfetch\b|\bXMLHttpRequest\b|\bsendBeacon\b|\bWebSocket\b|\bEventSource\b|\bimportScripts\b|\bRTCPeerConnection\b|\bWebTransport\b|\b(?:Shared)?Worker\b|\bserviceWorker\b|\bWorklet\b/],
+  // An element that loads an address once it exists or once a URL attribute is set on it.
+  ['element that loads a URL', /\bcreateElement(?:NS)?\s*\(|\bnew\s+(?:Image|Audio)\b|\.(?:src|srcset|href|data|action|formAction|poster|ping|background)\s*=(?!=)|\bsetAttribute(?:NS)?\s*\([^,]*['"](?:src|srcset|href|xlink:href|data|action|formaction|poster|ping|background)['"]|\b(?:dns-prefetch|prefetch|preload|preconnect|modulepreload)\b/],
+  ['navigation', /\blocation\s*\.\s*(?:assign|replace|reload)\s*\(|\blocation\s*\.\s*href\s*=(?!=)|\bwindow\s*\.\s*open\b|\.(?:requestS|s)ubmit\s*\(/],
+  // A copy made in the page's own document loads its lazy images, video and audio (T137): copies go through
+  // inertCopy() in lib/core/dom.ts, which makes them in a document with no browsing context.
+  ['copy in the live document', /\.cloneNode\s*\(/],
+  // globalThis['fe' + 'tch'] and the like: a global reached by a computed name hides from every check above.
+  ['computed global', /\b(?:globalThis|window|self|frames|parent|top)\s*\[/],
   ['console call', /\bconsole\s*\.\s*(?:log|info|warn|error|debug|trace|dir|table)\s*\(/],
   ['module syntax', /^\s*(?:import|export)\s|\bimport\s*\(|\bimport\.meta\b/m],
 ];
@@ -120,4 +133,4 @@ for (const [name, code] of files) {
   console.log(`${name}: ${Buffer.byteLength(code)} bytes, sha256 ${sha}`);
 }
 writeFileSync(path.join(outDir, 'page2ai-agent.SHA256SUMS'), `${sums.join('\n')}\n`);
-console.log(`agent script ${version}: OK (no extension API, no eval, no Trusted Types sink, no network API)`);
+console.log(`agent script ${version}: OK (no extension API, no eval, no Trusted Types sink, no network API, nothing that loads a URL)`);
