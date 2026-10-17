@@ -10,6 +10,7 @@ import {
   ensureElementInViewport,
   getButtonFallbackLabel,
   getButtonText,
+  inertCopy,
   getNearestHeadingText,
   getPrimaryContentRoot,
   getVisibleText,
@@ -334,7 +335,7 @@ export const getNodeByPath = (r: Element, p: number[]): Element | null => {
 };
 
 export const getTextFromCloneExcludingGroup = (r: Element, gc: Element): string => {
-  const cl = r.cloneNode(true) as Element;
+  const cl = inertCopy(r);
   const p = getPathFromRoot(r, gc);
   const gcl = getNodeByPath(cl, p);
   if (gcl) gcl.remove();

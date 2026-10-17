@@ -45,9 +45,12 @@ The script runs in the page's main world, next to the page's own scripts. The ex
 
 - Pages that enforce Trusted Types or a strict CSP: it works, through both MCP servers. Code evaluated over the
   DevTools protocol is exempt from `script-src`, and the bundle has no Trusted Types sink.
-- It makes no network request: the content comes only from the page (BL-49). The build fails on any network
-  call in the bundle, and `.e2e/e2e-agent.mjs` serves an `llms.txt` and `.md` copies and requires that neither
-  world requests them and that no CSP report reaches the server. Builds from `main` before this change asked
+- It makes no network request: the content comes only from the page (BL-49). The build fails if the bundle uses
+  a browser network API or anything else that makes the browser load an address (an element it creates or points
+  at a URL, a navigation, a global reached by a computed name, a copy made in the page's document). These are
+  static checks against a regression, not a sandbox; the proof at run time is `.e2e/e2e-agent.mjs`, which serves
+  an `llms.txt` and `.md` copies, makes every route answer a Markdown Accept header with its copy, and requires
+  that neither world requests anything but the page and that no CSP report reaches the server. Builds from `main` before this change asked
   the page's own site for `llms.txt` three times per run, through the page's `fetch` wrappers and its CSP: on a
   page with `connect-src 'none'` and a `report-uri`, that was three violation reports per run.
 - It never writes to the console, which page scripts can read.

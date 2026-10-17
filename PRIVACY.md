@@ -5,7 +5,7 @@
 
 ## Summary
 
-Page2AI does not collect, transmit, sell, or share any personal data. Everything the extension does happens locally in your browser. There is no server component, no analytics, no telemetry, no crash reporting, no third-party SDK.
+Page2AI does not collect, transmit, sell, or share any personal data. It converts the page in your browser. There is no server component, no analytics, no telemetry, no crash reporting, no third-party SDK. Version 1.4.0, the version in the stores today, also asks the site you are reading for a Markdown copy of the page; the next release does not. See [Network requests](#network-requests).
 
 If you don't want to trust the summary, the rest of this document walks through what Page2AI does with what you touch, permission by permission, feature by feature.
 
@@ -37,22 +37,36 @@ No content is transmitted to any server operated by Page2AI, the publisher, or a
 
 ## Network requests
 
-**From the release after 1.4.0, Page2AI makes no network request.** It reads only the page in your tab. It no
-longer asks the site for an `llms.txt` index or for a Markdown copy of the page, because such a copy can be older
-than the page or differ from it. The agent script built from the same code makes none either, and its build fails
-if a network call appears in it ([`scripts/build-agent.mjs`](scripts/build-agent.mjs)).
+**Version 1.4.0, the version in the stores today, and earlier versions ask the site you are reading for a
+Markdown copy of the page** each time you invoke the extension:
+
+- They request `/llms.txt`, `/docs/llms.txt` and `/llms-full.txt` from that site, with your cookies for it, as
+  following a link on it would. No setting turns these three requests off.
+- With the Docs or Research profile they also request the page's address with `.md` and with `/index.md` added, on
+  that site, whether or not such a file exists, and any `.md` address for the page that the page's
+  `<link rel="alternate">` or the site's `llms.txt` names, if it is on that site or on one of ten documentation hosts
+  (`developers.openai.com`, `platform.openai.com`, `platform.claude.com`, `docs.anthropic.com`, `code.claude.com`, `docs.github.com`, `docs.vercel.com`, `supabase.com`, `docs.stripe.com`, `langchain-ai.github.io`). They stop at the first one that answers with Markdown. Auto-detect, the popup's default, picks Docs when
+  the page looks like documentation; the Marketing, WordPress and Dashboard profiles make none of these `.md`
+  requests. Requests to the site carry your cookies for it. Requests to one of the ten hosts carry none, but, like
+  any request a page makes, they show that host your IP address and, under the browser's default referrer policy,
+  the site you were on.
+- When they copy a part of the page to read its text (a tab's label, or the text around a group of tabs), the
+  browser may load images, video or audio in that part that the page has not loaded yet, from wherever the page
+  loads them.
+
+None of these requests goes to the author of Page2AI or to an analytics or other service.
+
+**From the next release, Page2AI makes no network request.** It reads only the page in your tab, and no longer asks
+the site for an `llms.txt` index or a Markdown copy of the page, because such a copy can be older than the page or
+differ from it. It copies parts of the page into a separate document in which the browser loads nothing. The agent
+script built from the same code makes none either. Its build fails if the bundle uses a browser network API or
+anything else that makes the browser load an address ([`scripts/build-agent.mjs`](scripts/build-agent.mjs)), and an
+end-to-end test in Chrome fails if the extension or the agent script requests anything but the page
+([`.e2e/e2e-agent.mjs`](.e2e/e2e-agent.mjs)).
 
 To capture content the page shows only on demand, the extension scrolls the page and opens its tabs and collapsed
-sections, as you would. The page may then load its own content from its own servers, exactly as when you scroll or
-click it yourself. Those requests come from the page, not from Page2AI.
-
-**Version 1.4.0 and earlier** made these requests each time you invoked the extension: `/llms.txt`,
-`/docs/llms.txt` and `/llms-full.txt` on the site you were reading and, where the page had one, its `.md` copy on
-that site or on one of ten documentation hosts (`developers.openai.com`, `platform.openai.com`,
-`platform.claude.com`, `docs.anthropic.com`, `code.claude.com`, `docs.github.com`, `docs.vercel.com`,
-`supabase.com`, `docs.stripe.com`, `langchain-ai.github.io`). Requests to the site you were reading carried your
-cookies for it, as following a link on it does; requests to another host carried none. Nothing about you or the
-page was sent to the author or to any third party, and no setting turned these requests off.
+sections, as you would. The page may then load more of its own content, from wherever it loads it, exactly as when
+you scroll or click it yourself. Those requests come from the page, not from Page2AI.
 
 ## What data Page2AI stores
 
