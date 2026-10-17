@@ -15,7 +15,7 @@ fetch-based tool cannot reach, and only the Markdown lands on disk, never the ra
 |---|---|---|
 | `page2ai-agent.fn.js` | an async function expression that extracts and returns the result; defines nothing | Chrome DevTools MCP `evaluate_script` with `sourcePath` |
 | `page2ai-agent.js` | a classic script that defines `window.__page2aiAgent = { version, extract(options) }`, frozen, non-enumerable, non-configurable | Playwright MCP `--init-script` |
-| `SHA256SUMS` | checksums of both | `sha256sum -c SHA256SUMS` |
+| `page2ai-agent.SHA256SUMS` | checksums of both | `sha256sum -c page2ai-agent.SHA256SUMS` |
 
 The build fails if the bundle contains an extension API, `eval`, a Trusted Types sink, a console call, or a network
 call other than the two `fetch` calls of the official-Markdown lookup. The code is not minified, so it can be read
@@ -60,5 +60,28 @@ The script runs in the page's main world, next to the page's own scripts. The ex
 
 ## Where to get it
 
-For now, build it from this repository. Attaching the three files to GitHub Releases is planned. Check the
-checksum before use: the script runs with the page's privileges, on signed-in pages too.
+The script runs with the page's privileges, on signed-in pages too, so take it from a fixed release and check it
+before use.
+
+**From a GitHub Release.** Every release after v1.4.0 carries `page2ai-agent.js`, `page2ai-agent.fn.js` and
+`page2ai-agent.SHA256SUMS` next to the Chrome zip, built from the release tag by the `agent-build` and
+`agent-release` jobs of `.github/workflows/publish-chrome.yml`. v1.4.0 and earlier do not have them. Name the
+version in the URL: `releases/latest/download/...` also works, but it moves to the next release without notice.
+
+    V=vX.Y.Z   # a release from https://github.com/igorsaevets/page2ai-extension/releases
+    for f in page2ai-agent.js page2ai-agent.fn.js page2ai-agent.SHA256SUMS; do
+      curl -fsSLO "https://github.com/igorsaevets/page2ai-extension/releases/download/$V/$f"
+    done
+    sha256sum -c page2ai-agent.SHA256SUMS    # macOS: shasum -a 256 -c page2ai-agent.SHA256SUMS
+
+With the GitHub CLI: `gh release download vX.Y.Z --repo igorsaevets/page2ai-extension --pattern 'page2ai-agent*'`.
+In PowerShell, each line prints the file name and OK or FAILED:
+
+    Get-Content page2ai-agent.SHA256SUMS | ForEach-Object { $sum, $name = $_ -split '\s+', 2; if ((Get-FileHash $name -Algorithm SHA256).Hash -eq $sum) { "$name OK" } else { "$name FAILED" } }
+
+Line 1 of each script names its build, `version+commit`. The checksums prove that your files are the ones on the
+release; they do not prove who made the release, because whoever can change the release can change all three.
+To tie the files to the source, check out the tag, build it as below and compare the checksum files.
+
+**From this repository:** `npm ci` and `npm run build:agent` (see Build). The release workflow uploads only the
+files a release lacks and stops when the release already holds a different one; it never replaces a published file.

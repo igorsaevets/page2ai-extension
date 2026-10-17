@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Agent script: the extension's extractor as a page script, for AI agents that open pages through a browser automation tool** ([agent/README.md](agent/README.md)). `npm run build:agent` builds it in two shapes, for Chrome DevTools MCP (`evaluate_script` with `sourcePath`) and for Playwright MCP (`--init-script`), and the Markdown equals the popup's, on signed-in pages too. From this release on, `page2ai-agent.js`, `page2ai-agent.fn.js` and their `page2ai-agent.SHA256SUMS` are attached to every GitHub Release, built from the tag.
+
 ## [1.4.0] - 2026-10-16
 
 ### Fixed

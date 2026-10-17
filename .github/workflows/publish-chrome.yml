@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       reupload_tag:
-        description: 'Empty = read-only preflight: build the zip and check the store credentials, upload nothing. Recovery only: a tag such as v1.4.0 uploads the Chrome zip attached to that GitHub Release and submits it for review.'
+        description: 'Empty = read-only preflight: build the zip and the agent script, check the store credentials and the release path, send nothing to the store or a release. Recovery only: a tag such as v1.4.0 uploads the Chrome zip attached to that GitHub Release and submits it for review.'
         type: string
         default: ''
 
@@ -234,3 +234,87 @@ jobs:
           CWS_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
           CWS_ITEM_ID: ${{ secrets.CHROME_EXTENSION_ID }}
         run: bash scripts/cws-v2.sh status
+
+  # The agent script (agent/README.md, BL-45 C) goes on the same GitHub Release as the Chrome zip: page2ai-agent.js,
+  # page2ai-agent.fn.js and page2ai-agent.SHA256SUMS, built from the tag. `publish` needs neither job below, so
+  # nothing here can delay, fail or cancel the store upload, and a red agent job leaves the store copy and the zip
+  # as they are. Two jobs, so that `npm ci` (third-party install scripts) never runs where the token can write.
+  # A run by hand without inputs runs both as the preflight of this path: everything but the upload.
+  agent-build:
+    name: Agent script (build and check)
+    if: github.event_name == 'push' || inputs.reupload_tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails on an extension API, eval, a Trusted Types sink, a console call or a new network call in the bundle.
+      - name: Build the agent script
+        run: npm run build:agent
+
+      - name: Check the build (checksums, the version and commit on line 1)
+        run: bash scripts/release-agent.sh check .output/agent "$(jq -r .version package.json)+${GITHUB_SHA:0:7}"
+
+      - name: Hand the files to agent-release
+        uses: actions/upload-artifact@v7
+        with:
+          name: page2ai-agent
+          path: .output/agent/
+          if-no-files-found: error
+          retention-days: 3
+
+  agent-release:
+    name: Agent script → GitHub Release
+    needs: [publish, agent-build]
+    # !cancelled() lets it run after a failed `publish` too: the store gate fails that job after the release exists,
+    # and the release should still get its agent files. Without a release, attach fails and uploads nothing.
+    if: ${{ !cancelled() && needs.agent-build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (for scripts/release-agent.sh)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Take the files agent-build made
+        uses: actions/download-artifact@v8
+        with:
+          name: page2ai-agent
+          path: agent-files
+
+      - name: Check them after the hand-off
+        run: bash scripts/release-agent.sh check agent-files "$(jq -r .version package.json)+${GITHUB_SHA:0:7}"
+
+      - name: Rehearse on the latest release (read-only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release-agent.sh plan
+
+      # Uploads only what the release lacks, never replaces a published file, then downloads all three back
+      # and checks them there. If this job fails, re-run it alone: `gh run rerun <run-id> --job <job-id>`.
+      - name: Attach them to the release and check them there
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: bash scripts/release-agent.sh attach "$TAG" agent-files "${TAG#v}+${GITHUB_SHA:0:7}"
