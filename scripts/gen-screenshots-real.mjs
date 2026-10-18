@@ -397,13 +397,16 @@ try {
       .toBuffer();
 
     const outPath = path.resolve(outDir, `screenshot-${idx}-${shot.slug}-1280x800.png`);
-    const composed = await sharp(baseBuf)
+    const flat = await sharp(baseBuf)
       .composite([
         { input: shadow, top: top - shadowPad + 6, left: left - shadowPad },
         { input: popupBuf, top, left },
       ])
-      .png({ compressionLevel: 9 })
-      .toFile(outPath);
+      .png()
+      .toBuffer();
+    // The store dashboard takes "JPEG or 24-bit PNG (no alpha)"; the composite is opaque, so drop the channel.
+    const composed = await sharp(flat).removeAlpha().png({ compressionLevel: 9 }).toFile(outPath);
+    if (composed.channels !== 3) throw new Error(`${outPath}: ${composed.channels} channels, the store wants RGB`);
 
     console.log(`  ok ${composed.width}x${composed.height} → ${path.relative(root, outPath)}`);
 
