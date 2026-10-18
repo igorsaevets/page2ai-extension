@@ -6,9 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Built with Vite 8.3.4 (rolldown 1.2.14)** (BL-11). Its newer Oxc minifier writes `extractor.js` and the popup script differently: an early `return` or `continue` becomes an `else` branch or a conditional expression. With minification off, Vite 8.2.2 and 8.3.4 emit the same code, and the old and new `extractor.js` give the same Markdown on the 39 saved test pages with default and with all optional outputs on. Nothing else in the package changes.
+
 ### Fixed
 
 - **A space before a word that starts with a punctuation mark is kept** (P2A-016). The punctuation cleanup removed every space before `.`, `,`, `!`, `?`, `;` and `:` outside code blocks and tables, so «the .md twin» came out as «the.md twin», inline code `ls .` as `ls.` and `x = a ? b : c` as `x = a? b: c`, a list item `- .gitignore` as `-.gitignore` (no longer a list item) and a heading `## .NET` as `##.NET` (no longer a heading). It now removes only the space the renderer puts between an element and the mark that ends it (`**Note** :`, `[docs](url) .`): the mark must be followed by a space, the end of the line, `**` or `]`, and inline code and the line's list, heading and quote markers are left alone. On 39 saved pages, 14 changed, by 44 restored spaces; three headings and three list items came back, nothing else moved. Still removed: a space the page itself puts before a mark that ends a word («installation , set up»), which the output cannot tell from the renderer's.
+
+### Security
+
+- **Build tools with advisories updated** (BL-11): sharp 0.35.5 (GHSA-wq5f-xc86-pv6w, librsvg CVE-2026-96889; used only by the scripts that draw the icons and the store screenshots) and source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q, inside the build). Neither is part of the extension.
 
 ## [1.5.0] - 2026-10-17
 
