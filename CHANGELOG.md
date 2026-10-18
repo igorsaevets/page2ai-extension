@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-18
+
 ### Changed
 
 - **Built with Vite 8.3.4 (rolldown 1.2.14)** (BL-11). Its newer Oxc minifier writes `extractor.js` and the popup script differently: an early `return` or `continue` becomes an `else` branch or a conditional expression. With minification off, Vite 8.2.2 and 8.3.4 emit the same code, and the old and new `extractor.js` give the same Markdown on the 39 saved test pages with default and with all optional outputs on. Nothing else in the package changes.
@@ -17,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - **Build tools with advisories updated** (BL-11): sharp 0.35.5 (GHSA-wq5f-xc86-pv6w, librsvg CVE-2026-96889; used only by the scripts that draw the icons and the store screenshots) and source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q, inside the build). Neither is part of the extension.
+
+[1.5.1]: https://github.com/igorsaevets/page2ai-extension/releases/tag/v1.5.1
 
 ## [1.5.0] - 2026-10-17
 
