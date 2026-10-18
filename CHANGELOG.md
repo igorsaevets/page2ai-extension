@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **A space before a word that starts with a punctuation mark is kept** (P2A-016). The punctuation cleanup removed every space before `.`, `,`, `!`, `?`, `;` and `:` outside code blocks and tables, so «the .md twin» came out as «the.md twin», inline code `ls .` as `ls.` and `x = a ? b : c` as `x = a? b: c`, a list item `- .gitignore` as `-.gitignore` (no longer a list item) and a heading `## .NET` as `##.NET` (no longer a heading). It now removes only the space the renderer puts between an element and the mark that ends it (`**Note** :`, `[docs](url) .`): the mark must be followed by a space, the end of the line, `**` or `]`, and inline code and the line's list, heading and quote markers are left alone. On 39 saved pages, 14 changed, by 44 restored spaces; three headings and three list items came back, nothing else moved. Still removed: a space the page itself puts before a mark that ends a word («installation , set up»), which the output cannot tell from the renderer's.
+
 ## [1.5.0] - 2026-10-17
 
 ### Removed
