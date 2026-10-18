@@ -1,9 +1,9 @@
 # CHROMEWEBSTORE.md: Page2AI on the Chrome Web Store
 
-> Last Updated: 2026-10-17. The store record for item `dlpaaijcnbbmlfeohlphjpnbbcnomnno`: what the
+> Last Updated: 2026-10-18. The store record for item `dlpaaijcnbbmlfeohlphjpnbbcnomnno`: what the
 > Developer Dashboard holds, field by field, and why each permission is requested.
-> Title, Summary and Detailed description were read from the public listing on 2026-10-17
-> (version 1.4.0, updated October 16, 2026). Until that day this file was `assets/store/listing.md`, the v1.0
+> Title and Summary were read from the public listing on 2026-10-17 (version 1.4.0, updated October 16,
+> 2026); the Detailed description is the dashboard field as saved on 2026-10-18 (T140). Until 2026-10-17 this file was `assets/store/listing.md`, the v1.0
 > submission draft, and its three text fields still held the v1.0 wording (now in section 8).
 > The file name is the one the Chrome team's `chrome-extensions` agent skill
 > (GoogleChrome/modern-web-guidance) keeps current whenever the extension changes.
@@ -37,7 +37,7 @@ _Best fit. Official examples include "document editors" and "tools to help users
 English (Worldwide)
 ```
 
-### Detailed description (dashboard field, live text on 2026-10-17)
+### Detailed description (dashboard field since 2026-10-18)
 ````
 Page2AI turns any webpage into a clean, AI-ready Markdown document with one click — ready to paste into your LLM, coding agent, or RAG pipeline.
 
@@ -48,8 +48,7 @@ WHAT MAKES IT DIFFERENT
 • Profile-aware extraction — auto-detects the site kind (docs, marketing, research, dashboard) and tunes the strategy per profile. Manual override in one click.
 • Tab & dropdown capture — pulls code from hidden tabs (Python vs TypeScript vs cURL vs …) with DOM-position-aware dedup, so you get the code from every tab, not just the active one.
 • Code blocks with language hints — ```python, ```js, ```bash preserved verbatim so LLMs read them correctly.
-• MDX / JSX post-processing — Mintlify components (<Note>, <CodeGroup>, <Tabs>, <AccordionGroup>) become plain Markdown.
-• llms.txt short path — if the site publishes an official .md alongside the page, Page2AI uses it directly.
+• Only the page you see — Page2AI converts the page in your tab and nothing else. It never swaps in the site's llms.txt or a Markdown copy, which can be older than the page.
 • Quality gate — post-extraction check on <pre> count vs a plain-text baseline; automatic fallback if under-extraction is detected.
 • Structured-data appendix — JSON-LD, OpenGraph, Microdata, Next.js __NEXT_DATA__ hoisted into a machine-readable appendix at the end.
 • Cached-result recovery — close the popup mid-run, reopen it, your result is waiting (badge shows ✓).
@@ -99,33 +98,26 @@ BUILT BY
 
 Igor Saevets, AI Expert and Entrepreneur.
 ````
-_3180 characters (limit 16,000). Plain text: the store does not render Markdown. This wording went in
-with the resubmission of 2026-09-07, after the keyword-spam rejection in section 8._
+_3125 characters (limit 16,000). Plain text: the store does not render Markdown. Saved in the dashboard and
+submitted for review on 2026-10-18 at 01:46 UTC (T140, section 7); until the review passes, the public listing
+shows the 2026-09-07 text with the two bullets named below. The rest is the wording of the 2026-09-07
+resubmission, after the keyword-spam rejection in section 8._
 
 ---
 
 
-### Detailed description: change for 1.5.0 (not in the dashboard yet)
+### Detailed description: the change for 1.5.0 (applied 2026-10-18)
 
-Since 1.5.0 the extension takes the content only from the page (BL-49, Igor 2026-10-17), so two bullets of the live
-text above are false for it. Change the Detailed description field in one dashboard session, once 1.5.0 is published:
+Since 1.5.0 the extension takes the content only from the page (BL-49, Igor 2026-10-17), so two bullets of the
+2026-09-07 text were false for it. T140 changed the saved dashboard field in place: it deleted the bullet that
+began `• MDX / JSX post-processing` (that clean-up ran only on the Markdown copies the extension no longer reads)
+and replaced the bullet that began `• llms.txt short path` with `• Only the page you see`. The SHA-256 of the field
+before and after each step matched the public text and the text above. Screenshots 1-3 were replaced in the same
+session (section 2): the old ones showed the label v1.3.0, and 2 and 3 the popup's `official-md` status line.
 
-1. Delete the bullet that begins `• MDX / JSX post-processing`: the clean-up it describes ran only on the Markdown
-   copies the extension no longer reads.
-2. Replace the bullet that begins `• llms.txt short path` with this line:
-
-````text
-• Only the page you see — Page2AI converts the page in your tab and nothing else. It never swaps in the site's llms.txt or a Markdown copy, which can be older than the page.
-````
-
-3. Screenshots 2 and 3 in the dashboard show the popup's `official-md` status line, and all three show the label
-   v1.3.0. New captures of the same pages from the 1.5.0 build are in `assets/store/` (T139, by
-   `scripts/gen-screenshots-real.mjs`, which now takes the label from the built manifest). Upload them in the same
-   session, in the same order.
-
-The PRIVACY paragraph of the description stays as it is: it is true of 1.5.0. It was not complete for 1.4.0,
-which asked the site for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do not
-quote it as a description of 1.4.0 (T136 panel, grokbuild).
+The PRIVACY paragraph of the description is true of 1.5.0. It was not complete for 1.4.0, which asked the site
+for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do not quote it as a
+description of 1.4.0 (T136 panel, grokbuild).
 
 ## 2. Graphic assets
 
@@ -147,10 +139,14 @@ Content: brand mark + tagline "Any webpage -> clean, AI-ready Markdown"
 ### Screenshots (1 to 5, at least 1 REQUIRED)
 ```
 Files: assets/store/screenshot-{1..N}-1280x800.png
-Size: 1280x800 PNG (or 640x400)
+Size: 1280x800 (or 640x400), JPEG or 24-bit PNG with no alpha channel (the dashboard's rule)
+In the dashboard since 2026-10-18: screenshot-1-uscis-eb1, -2-openwebui-tools, -3-xai-grok-45, in that order
 Orientation: landscape only (portrait not supported by CWS)
 Content: real Page2AI popup + real extraction result on real docs pages
 ```
+_`scripts/gen-screenshots-real.mjs` captures them from the built extension and takes the popup's version label
+from its manifest. Since T140 it writes RGB: until then its PNGs carried an alpha channel (opaque everywhere),
+which the dashboard's rule excludes. The dashboard serves the files in `assets/store` byte for byte._
 
 ### Marquee promo tile (OPTIONAL)
 ```
@@ -264,9 +260,10 @@ _Valid choice for a free, hobbyist, open-source utility with no monetization. Go
 
 ### Homepage URL
 ```
-https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno
+https://github.com/igorsaevets/page2ai-extension
 ```
-_After CWS approval, points listing to itself. Before approval, use the GitHub repo URL._
+_The dashboard field as read on 2026-10-18 (T140). Until then this file held the v1.0 plan to point it at the
+listing itself._
 
 ### Support URL
 ```
@@ -295,8 +292,11 @@ Skip for v1.0. Requires domain ownership via Google Search Console TXT record. O
 | 1.0.2 | 2026-07-20 | Published 2026-07-30, the first approved version |
 | 1.0.1, 1.0.0 | 2026-07-20 | Not recorded here |
 
-Listing-only changes: a rewrite was rejected on 2026-09-05 (section 8); the text now live was
-resubmitted on 2026-09-07 and approved.
+Listing-only changes: a rewrite was rejected on 2026-09-05 (section 8); the next text was resubmitted on
+2026-09-07 and approved. On 2026-10-18 at 01:46 UTC (T140) the Detailed description change for 1.5.0
+(section 1) and screenshots 1-3 from the 1.5.0 build were submitted for review with automatic publishing; at
+01:47 UTC the API reported «Published revision: PUBLISHED 1.5.0 at 100%» and «Submitted revision:
+PENDING_REVIEW 1.5.0 at 100%».
 
 ## 8. Review notes and rejection history
 
@@ -330,7 +330,7 @@ Before clicking **Submit for Review**, confirm:
 - [ ] All three certifications checked (section 3)
 - [ ] Icon 128x128 uploaded (section 2)
 - [ ] Small promo tile 440x280 uploaded (section 2)
-- [ ] At least one screenshot 1280x800 uploaded (section 2)
+- [ ] At least one screenshot 1280x800, JPEG or 24-bit PNG without alpha, uploaded (section 2)
 - [ ] Trader status declared (section 5)
 - [ ] Category set to Workflow & Planning (section 1)
 
