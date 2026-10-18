@@ -103,6 +103,11 @@ console.log(md.length);</code></pre>
   <blockquote><p><strong>Note:</strong> Markdown is the <a href="https://example.com/lingua">lingua franca</a> of LLMs.</p></blockquote>
   <ul><li>First point</li><li>Second point<ul><li>Nested point</li></ul></li></ul>
 
+  <h2>.NET and dotfiles</h2>
+  <p>The space stays before the .md twin; run <code>ls .</code> or <code>x = a ? b : c</code> as written.</p>
+  <ul><li>.gitignore</li><li>./run.sh</li></ul>
+  <p>See <a href="https://example.com/punct">the docs</a>. A <strong>Warning</strong>: the join space goes.</p>
+
   <h2>Pricing</h2>
   <table>
     <thead><tr><th>Model</th><th colspan="2">Cost per MTok</th><th>Context</th></tr></thead>
@@ -263,6 +268,12 @@ try {
   check('nested list rendered', md.includes('- Nested point'));
   check('blockquote preserves bold', md.includes('> ') && md.includes('**Note:**'));
   check('blockquote preserves link', md.includes('](https://example.com/lingua)'));
+  // P2A-016: a space the page has before a token stays; the space the join puts before a mark goes.
+  check('heading that starts with a dot', md.includes('\n## .NET and dotfiles\n'));
+  check('space before a dotted word', md.includes('stays before the .md twin; run'));
+  check('inline code keeps its spaces', md.includes('`ls .`') && md.includes('`x = a ? b : c`'));
+  check('list items that start with a dot', md.includes('\n- .gitignore\n') && md.includes('\n- ./run.sh\n'));
+  check('mark after a link or bold is joined', md.includes('[the docs](https://example.com/punct). A **Warning**: the'));
   check('table colspan expanded', (() => {
     const headerLine = md.split('\n').find(l => /\|\s*Model\s*\|/.test(l));
     return headerLine ? (headerLine.match(/\|/g) || []).length >= 5 : false;

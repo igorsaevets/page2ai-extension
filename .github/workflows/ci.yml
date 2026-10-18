@@ -35,6 +35,10 @@ jobs:
       - name: Type-check
         run: npm run compile
 
+      # Node 24 strips the types, so the test imports lib/core/md-postprocess.ts as it ships (P2A-016).
+      - name: Markdown post-processing unit test
+        run: node scripts/md-postprocess.test.mjs
+
       - name: Build (Chrome MV3)
         run: npm run build
       # The agent script (BL-45 C): fails on an extension API, eval, a Trusted Types sink, a console call

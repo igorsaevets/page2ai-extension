@@ -200,7 +200,32 @@ export const collapseShortAdjacentLines = (
   return out.join('\n');
 };
 
-// Punctuation cleanup (space before period, comma, etc.).
+// Punctuation cleanup. The renderer joins inline parts with a space, so `<b>Note</b>:` and
+// `<a href>docs</a>.` come out as "**Note** :" and "[docs](url) .". That space is removed only
+// where the mark ends a word: before whitespace, the end of the line, a closing `**` or `]`.
+// A mark that starts a token keeps its space ("the .md twin", "./run.sh", "..."), and neither
+// the line's block markers nor inline code are touched (P2A-016: `- .gitignore` became
+// `-.gitignore`, `## .NET` stopped being a heading, `ls .` became `ls.`).
+const MD_BLOCK_PREFIX_RE = /^[ \t]*(?:(?:>|[-*+]|\d{1,9}[.)]|\[[ xX]\]|#{1,6})[ \t]+)*/;
+const MD_CODE_SPAN_RE = /(?<![\\`])(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
+const SPACE_BEFORE_END_MARK_RE = /(?<=\S)[ \t]+(?=[.,!?;:](?:\s|$|\*\*|\]))/g;
+
+const cleanupLinePunctuation = (line: string): string => {
+  SPACE_BEFORE_END_MARK_RE.lastIndex = 0;
+  if (!SPACE_BEFORE_END_MARK_RE.test(line)) return line;
+  const start = line.match(MD_BLOCK_PREFIX_RE)?.[0].length ?? 0;
+  const code: Array<[number, number]> = [];
+  if (line.includes('`')) {
+    for (const m of line.matchAll(MD_CODE_SPAN_RE)) {
+      const at = m.index ?? 0;
+      code.push([at, at + m[0].length]);
+    }
+  }
+  return line.replace(SPACE_BEFORE_END_MARK_RE, (ws: string, at: number) =>
+    at < start || code.some(([a, b]) => at > a && at < b) ? ws : '',
+  );
+};
+
 export const cleanupPunctuation = (
   text: string,
   config: Pick<ResolvedConfig, 'cleanupPunctuation'>,
@@ -243,7 +268,7 @@ export const cleanupPunctuation = (
       continue;
     }
 
-    out.push(line.replace(/\s+([.,!?;:])/g, '$1'));
+    out.push(cleanupLinePunctuation(line));
   }
   return out.join('\n');
 };
