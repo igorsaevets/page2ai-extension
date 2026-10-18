@@ -98,10 +98,10 @@ BUILT BY
 
 Igor Saevets, AI Expert and Entrepreneur.
 ````
-_3125 characters (limit 16,000). Plain text: the store does not render Markdown. Saved in the dashboard and
-submitted for review on 2026-10-18 at 01:46 UTC (T140, section 7); until the review passes, the public listing
-shows the 2026-09-07 text with the two bullets named below. The rest is the wording of the 2026-09-07
-resubmission, after the keyword-spam rejection in section 8._
+_3125 characters (limit 16,000). Plain text: the store does not render Markdown. Saved in the dashboard,
+submitted for review on 2026-10-18 at 01:46 UTC (T140) and public since the review passed the same day
+(section 7). The rest is the wording of the 2026-09-07 resubmission, after the keyword-spam rejection in
+section 8._
 
 ---
 
@@ -284,7 +284,8 @@ Skip for v1.0. Requires domain ownership via Google Search Console TXT record. O
 
 | Version | CHANGELOG date | On the Chrome Web Store |
 |---|---|---|
-| 1.5.0 | 2026-10-17 | Published 2026-10-17 (UTC): Chrome's update service served 1.5.0 from 23:24Z, 31 min after the API submit; CRX = the release zip per entry. Uploaded and submitted from tag `v1.5.0` through the API |
+| 1.5.1 | 2026-10-18 | Published 2026-10-18 (UTC): Chrome's update service served 1.5.1 from 22:22Z, 37 min after the API submit (21:45:49Z); CRX = the release zip per entry. Uploaded and submitted from tag `v1.5.1` through the API |
+| 1.5.0 | 2026-10-17 | Published 2026-10-17 (UTC): Chrome's update service served 1.5.0 from 23:24Z, 31 min after the API submit; CRX = the release zip per entry. Uploaded and submitted from tag `v1.5.0` through the API; served until 1.5.1 |
 | 1.4.0 | 2026-10-16 | Published 2026-10-17 (UTC), served until 1.5.0. Uploaded and submitted from tag `v1.4.0` through the API |
 | 1.3.0 | 2026-07-27 | Published; served until 1.4.0 |
 | 1.2.0 | 2026-07-23 | Not recorded here |
@@ -296,7 +297,9 @@ Listing-only changes: a rewrite was rejected on 2026-09-05 (section 8); the next
 2026-09-07 and approved. On 2026-10-18 at 01:46 UTC (T140) the Detailed description change for 1.5.0
 (section 1) and screenshots 1-3 from the 1.5.0 build were submitted for review with automatic publishing; at
 01:47 UTC the API reported «Published revision: PUBLISHED 1.5.0 at 100%» and «Submitted revision:
-PENDING_REVIEW 1.5.0 at 100%».
+PENDING_REVIEW 1.5.0 at 100%». Google approved it the same day: the public listing showed the new description
+and screenshots at 21:29 UTC (no poll ran between 10:33 UTC, which still saw the old listing, and 21:29), and at
+21:32 UTC the API reported «Submitted revision: none».
 
 ## 8. Review notes and rejection history
 
