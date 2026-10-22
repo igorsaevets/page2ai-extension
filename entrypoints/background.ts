@@ -4,6 +4,7 @@
 // Bridge WebSocket client that connects to @page2ai/mcp.
 
 import {
+  BRIDGE_ORIGINS,
   OPTIONS_GLOBAL_KEY,
   STEP_INJECT_ERROR,
   resultCacheKey,
@@ -74,6 +75,22 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
 export default defineBackground(() => {
   // A toggle can arrive while initBridge still awaits storage: chain on it.
   const bridgeReady = initBridge();
+
+  // The grant itself turns the bridge on: the popup that asked may be gone by
+  // the time the user answers the prompt, and its .then with it. A revoke
+  // (chrome://extensions, about:addons, or the switch) turns it off.
+  const touchesBridge = (p: { origins?: string[] }): boolean =>
+    Boolean(p.origins?.some((o) => BRIDGE_ORIGINS.includes(o)));
+  browser.permissions.onAdded.addListener((p) => {
+    if (!touchesBridge(p)) return;
+    void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: true });
+    void bridgeReady.then(() => bridgeClient?.enable());
+  });
+  browser.permissions.onRemoved.addListener((p) => {
+    if (!touchesBridge(p)) return;
+    void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: false });
+    void bridgeReady.then(() => bridgeClient?.disable());
+  });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const msg = message as Page2aiMessage;
