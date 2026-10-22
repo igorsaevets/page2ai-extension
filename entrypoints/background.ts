@@ -72,7 +72,8 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
 };
 
 export default defineBackground(() => {
-  void initBridge();
+  // A toggle can arrive while initBridge still awaits storage: chain on it.
+  const bridgeReady = initBridge();
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const msg = message as Page2aiMessage;
@@ -112,19 +113,19 @@ export default defineBackground(() => {
 
     if (msg?.type === 'PAGE2AI_BRIDGE_TOGGLE') {
       void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: msg.enabled });
-      if (msg.enabled) {
-        void bridgeClient?.enable();
-      } else {
-        bridgeClient?.disable();
-      }
+      void bridgeReady.then(() => {
+        if (msg.enabled) {
+          void bridgeClient?.enable();
+        } else {
+          bridgeClient?.disable();
+        }
+      });
       return undefined;
     }
 
-    if (msg?.type === 'PAGE2AI_BRIDGE_STATUS') {
-      // Popup requesting current state — reply with bridge status
-      const state = bridgeClient?.getState() ?? 'disconnected';
-      sendResponse({ state });
-      return false;
+    if (msg?.type === 'PAGE2AI_BRIDGE_STATUS_QUERY') {
+      void bridgeReady.then(() => sendResponse({ state: bridgeClient?.getState() ?? 'disconnected' }));
+      return true; // answered after initBridge settles
     }
 
     return undefined;

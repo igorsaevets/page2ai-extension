@@ -28,10 +28,9 @@ const RESTRICTED_DOMAINS = new Set([
   'signin.aws.amazon.com',
 ]);
 
-const RESTRICTED_SCHEME_PREFIXES = [
-  'chrome:', 'chrome-extension:', 'chrome-untrusted:', 'devtools:',
-  'edge:', 'about:', 'view-source:', 'moz-extension:',
-];
+// The bridge opens web pages only. An allowlist, not a list of bad schemes:
+// file:, data:, blob: and javascript: were all reachable through the old one.
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
 
 interface ConvertRequest {
   type: 'convert';
@@ -221,6 +220,18 @@ export class BridgeClient {
       return;
     }
 
+    // Check site access before opening anything: without it the tab would load
+    // and the injection fail. Match patterns carry no port.
+    const { protocol, hostname } = new URL(req.url);
+    const hasAccess = await browser.permissions
+      .contains({ origins: [`${protocol}//${hostname}/*`] })
+      .catch(() => false);
+    if (!hasAccess) {
+      this.sendError(req.id, 'PERMISSION_REQUIRED',
+        `Page2AI has no access to ${hostname}: turn the Agent Bridge switch in the Page2AI popup off and on to grant site access`);
+      return;
+    }
+
     let tabId: number;
     try {
       const tab = await browser.tabs.create({ url: req.url, active: false });
@@ -371,9 +382,9 @@ export class BridgeClient {
   private isRestrictedUrl(url: string): boolean {
     try {
       const parsed = new URL(url);
-      if (RESTRICTED_SCHEME_PREFIXES.some((s) => parsed.protocol.startsWith(s))) return true;
-      if (RESTRICTED_DOMAINS.has(parsed.hostname)) return true;
-      return false;
+      if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) return true;
+      // `accounts.google.com.` (trailing dot) is the same host.
+      return RESTRICTED_DOMAINS.has(parsed.hostname.replace(/\.$/, ''));
     } catch {
       return true;
     }

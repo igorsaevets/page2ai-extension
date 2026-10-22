@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Agent Bridge** (#9, PR #34): an off-by-default switch in the popup connects Page2AI to `@page2ai/mcp` on `ws://127.0.0.1:3025`. An agent's `page_to_markdown` call with a URL then opens the page in a background tab of the user's browser (cookies, page scripts), runs the extractor and returns its Markdown. Sign-in pages of Google, Microsoft, Apple and AWS are refused.
+
+### Fixed
+
+- **The Agent Bridge could not convert any page with the shipped manifest.** It opens a background tab and injects the extractor there, but `activeTab` covers only the tab the user invoked Page2AI on, so every request failed with «Cannot access contents of the page» (reproduced with Chrome and `@page2ai/mcp` 0.5.1). The CI build grants `http://127.0.0.1/*` statically, which hid it. Turning the switch on now asks for site access (`optional_host_permissions`, http and https); an update that adds an optional permission does not disable the extension. Without the access the bridge refuses before opening a tab (`PERMISSION_REQUIRED`), and turning the switch off gives the access back.
+- **The switch did nothing on pages the popup cannot extract** (the New Tab page, the Web Store): it was wired after the popup's early returns for those pages. It now works everywhere, and the popup shows the real connection state instead of «connecting…».
+- **Only `http:` and `https:` URLs reach the bridge**: the old list of refused schemes let `file:`, `data:` and `blob:` through.
+
 ## [1.5.1] - 2026-10-18
 
 ### Changed
