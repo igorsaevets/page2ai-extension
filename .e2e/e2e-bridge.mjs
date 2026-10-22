@@ -13,6 +13,10 @@
 // EXPECT     'bridge' (default): the page must come through the extension;
 //            'fallback': the extension has no access to the page, so the
 //            server must still answer, by its own fetch.
+// MANUAL_GRANT=1  a visible Chrome; a person answers the switch's site-access
+//            prompt with Allow (browser UI no automation can click). With the
+//            production build this checks the one step CI cannot:
+//            EXT_PATH=.output/chrome-mv3 MANUAL_GRANT=1 node .e2e/e2e-bridge.mjs
 
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
@@ -88,9 +92,10 @@ async function launch(headless) {
   });
 }
 
+const MANUAL = process.env.MANUAL_GRANT === '1';
 let browser;
 try {
-  browser = await launch(true);
+  browser = await launch(!MANUAL);
 } catch (e) {
   console.warn(`headless launch failed (${e.message}); retrying headful`);
   browser = await launch(false);
@@ -161,8 +166,9 @@ try {
   // Opened in a tab, the popup's own chrome-extension:// page is the active
   // tab: a page it cannot extract, like the New Tab page for a real user. The
   // switch has to work there too.
+  if (MANUAL) console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
   await popup.click('#bridge-toggle');
-  const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), 8000);
+  const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), MANUAL ? 120000 : 8000);
   const afterClick = await popup.$eval('#bridge-status', (n) => `${n.dataset.state}: ${n.textContent}`).catch(() => '?');
   console.log(`popup status after the switch: ${afterClick}`);
   if (EXPECT === 'bridge') check('popup switch connects the bridge (on a page it cannot extract)', viaSwitch);
