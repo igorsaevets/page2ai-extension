@@ -70,8 +70,10 @@ jobs:
       # puppeteer-core drives a real browser instead of bundling one, which is
       # the point: the extractor runs inside an actual extension context, not a
       # DOM emulation that would not reproduce injection or the service worker.
-      - name: Install puppeteer-core
-        run: npm i --no-save puppeteer-core
+      # @page2ai/mcp is the other end of the Agent Bridge suite: the published
+      # server, so the test speaks the wire protocol users get.
+      - name: Install puppeteer-core and @page2ai/mcp
+        run: npm i --no-save puppeteer-core @page2ai/mcp@0.5
 
       - name: Install Chrome
         uses: browser-actions/setup-chrome@v2
@@ -128,6 +130,14 @@ jobs:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
           PAGE2AI_E2E_TARGET: agent
         run: xvfb-run -a node .e2e/e2e-tab-panels.mjs
+      # MCP stdio -> WebSocket -> the popup's switch -> a background tab -> the
+      # extractor -> back. The e2e build has site access: a user who allowed it.
+      # Without it the extension refuses before opening a tab (the production
+      # build, EXPECT=fallback, run locally: no one answers the prompt in CI).
+      - name: Agent Bridge suite (extension + @page2ai/mcp over stdio)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-bridge.mjs
 
   cws-client:
     name: Chrome Web Store client (mock API)

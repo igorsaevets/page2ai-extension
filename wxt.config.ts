@@ -12,6 +12,11 @@ export default defineConfig({
     author: browser === 'firefox' ? 'Igor Saevets' : { email: 'support@igorsaevets.com' },
     homepage_url: 'https://github.com/igorsaevets/page2ai-extension',
     permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage'],
+    // Agent Bridge only: requested by the popup's switch, never at install, so
+    // an update adding it does not disable the extension (Chrome docs:
+    // "Chrome won't disable it for your users if the upgrade adds optional
+    // rather than required permissions"). Firefox 128+, Chrome 102+.
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
     commands: {
       // Opens the popup, which drives extraction. Ctrl+Shift+M is taken by
       // Chrome's profile switcher, so Alt+Shift+M (MarkDownload's convention).
@@ -47,9 +52,11 @@ export default defineConfig({
         },
       },
     }),
-    // The e2e build grants localhost host access so the smoke test can call
-    // scripting.executeScript without the activeTab user gesture. Never ships.
-    ...(mode === 'e2e' ? { host_permissions: ['http://127.0.0.1/*'] } : {}),
+    // The e2e build grants host access so the smoke test can call
+    // scripting.executeScript without the activeTab user gesture, and so the
+    // Agent Bridge switch's permissions.request resolves without a prompt (a
+    // user who allowed it). Never ships.
+    ...(mode === 'e2e' ? { host_permissions: ['http://*/*', 'https://*/*'] } : {}),
     // real-test drives extraction against real public sites (docs, blogs, gov).
     // Broad host access is required because there is no user gesture in the
     // headless runner. Never ships — produces its own .output/chrome-mv3-real-test.

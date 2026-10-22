@@ -5,6 +5,7 @@
 
 import './style.css';
 import {
+  BRIDGE_ORIGINS,
   STEP_BUSY,
   STEP_INJECT_ERROR,
   resultCacheKey,
@@ -13,7 +14,7 @@ import {
   type ExtractRequestMessage,
   type Page2aiMessage,
 } from '~/lib/messages';
-import type { BridgeToggleMessage } from '~/lib/messages';
+import type { BridgeStatusQueryMessage, BridgeToggleMessage } from '~/lib/messages';
 import type { AutoProfile, ExtractResult } from '~/lib/types';
 
 type StatusTone = 'info' | 'busy' | 'ok' | 'warn' | 'error';
@@ -209,7 +210,58 @@ const downloadResult = (): void => {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 };
 
+// The switch works on every page, including those the popup cannot extract
+// (the New Tab page, the Web Store): it is wired before init's early returns.
+const initBridgeSwitch = async (): Promise<void> => {
+  el.bridgeToggle.addEventListener('change', () => {
+    const toggle = (enabled: boolean): void => {
+      const msg: BridgeToggleMessage = { type: 'PAGE2AI_BRIDGE_TOGGLE', enabled };
+      void browser.runtime.sendMessage(msg);
+    };
+    if (!el.bridgeToggle.checked) {
+      toggle(false);
+      // Least privilege: the site access goes with the bridge.
+      void browser.permissions.remove({ origins: BRIDGE_ORIGINS }).catch(() => undefined);
+      updateBridgeStatusText('disconnected');
+      return;
+    }
+    // Requested first and without an await before it: Firefox accepts
+    // permissions.request only directly inside the user's input handler.
+    browser.permissions.request({ origins: BRIDGE_ORIGINS }).then(
+      (granted) => {
+        if (!granted) {
+          el.bridgeToggle.checked = false;
+          updateBridgeStatusText('needs-access');
+          return;
+        }
+        toggle(true);
+        updateBridgeStatusText('connecting');
+      },
+      () => {
+        el.bridgeToggle.checked = false;
+        updateBridgeStatusText('needs-access');
+      },
+    );
+  });
+
+  const stored = await browser.storage.local.get('agentBridge');
+  el.bridgeToggle.checked = stored.agentBridge === true;
+  if (!el.bridgeToggle.checked) {
+    updateBridgeStatusText('disconnected');
+    return;
+  }
+  const hasAccess = await browser.permissions.contains({ origins: BRIDGE_ORIGINS }).catch(() => false);
+  if (!hasAccess) {
+    updateBridgeStatusText('needs-access');
+    return;
+  }
+  const query: BridgeStatusQueryMessage = { type: 'PAGE2AI_BRIDGE_STATUS_QUERY' };
+  const reply = (await browser.runtime.sendMessage(query).catch(() => null)) as { state?: string } | null;
+  updateBridgeStatusText(reply?.state ?? 'connecting');
+};
+
 const init = async (): Promise<void> => {
+  void initBridgeSwitch();
   el.version.textContent = `v${browser.runtime.getManifest().version}`;
   el.extract.addEventListener('click', () => void startExtract());
   el.copy.addEventListener('click', async () => {
@@ -251,18 +303,6 @@ const init = async (): Promise<void> => {
     showResult(cached.result, { fromCache: true });
   }
 
-  // --- Agent Bridge toggle ---
-  const bridgeStored = await browser.storage.local.get('agentBridge');
-  el.bridgeToggle.checked = bridgeStored.agentBridge === true;
-  updateBridgeStatusText(el.bridgeToggle.checked ? 'connecting' : 'disconnected');
-
-  el.bridgeToggle.addEventListener('change', () => {
-    const enabled = el.bridgeToggle.checked;
-    const msg: BridgeToggleMessage = { type: 'PAGE2AI_BRIDGE_TOGGLE', enabled };
-    void browser.runtime.sendMessage(msg);
-    updateBridgeStatusText(enabled ? 'connecting' : 'disconnected');
-  });
-
   el.extract.focus();
 };
 
@@ -271,6 +311,7 @@ const updateBridgeStatusText = (state: string): void => {
     disconnected: '',
     connecting: 'connecting…',
     connected: 'connected',
+    'needs-access': 'needs site access',
   };
   el.bridgeStatus.textContent = labels[state] ?? '';
   el.bridgeStatus.dataset.state = state;

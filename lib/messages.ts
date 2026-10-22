@@ -27,6 +27,12 @@ export interface ResultMessage {
   result: ExtractResult;
 }
 
+/** Site access the Agent Bridge needs: the manifest's optional_host_permissions,
+ *  requested by the popup's switch (a user gesture), never at install. Without
+ *  it, scripting.executeScript on a tab the bridge opened fails: activeTab
+ *  covers only the tab the user invoked Page2AI on. */
+export const BRIDGE_ORIGINS = ['http://*/*', 'https://*/*'];
+
 /** popup → background: toggle the Agent Bridge on or off. */
 export interface BridgeToggleMessage {
   type: 'PAGE2AI_BRIDGE_TOGGLE';
@@ -39,12 +45,19 @@ export interface BridgeStatusMessage {
   state: 'disconnected' | 'connecting' | 'connected';
 }
 
+/** popup → background: ask for the current status; answered with { state }.
+ *  The background broadcasts only changes, so an open popup asks once. */
+export interface BridgeStatusQueryMessage {
+  type: 'PAGE2AI_BRIDGE_STATUS_QUERY';
+}
+
 export type Page2aiMessage =
   | ExtractRequestMessage
   | ProgressMessage
   | ResultMessage
   | BridgeToggleMessage
-  | BridgeStatusMessage;
+  | BridgeStatusMessage
+  | BridgeStatusQueryMessage;
 
 /** background → popup: response to ExtractRequestMessage. */
 export interface ExtractAck {
