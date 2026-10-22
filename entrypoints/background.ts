@@ -1,20 +1,45 @@
-// Background service worker: injects the extractor into the requested tab and
+// Background service worker: injects the extractor into the requested tab,
 // persists results in storage.session so the popup can recover them even if it
-// was closed while the extraction was still running.
+// was closed while the extraction was still running, and manages the Agent
+// Bridge WebSocket client that connects to @page2ai/mcp.
 
 import {
   OPTIONS_GLOBAL_KEY,
   STEP_INJECT_ERROR,
   resultCacheKey,
+  type BridgeStatusMessage,
   type CachedResult,
   type ExtractAck,
   type ExtractRequestMessage,
   type Page2aiMessage,
   type ProgressMessage,
 } from '~/lib/messages';
+import { BridgeClient } from '~/lib/agent-bridge';
 
 const errorText = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
+
+const BRIDGE_STORAGE_KEY = 'agentBridge';
+const BRIDGE_PORT_KEY = 'agentBridgePort';
+
+let bridgeClient: BridgeClient | null = null;
+
+const initBridge = async (): Promise<void> => {
+  const stored = await browser.storage.local.get([BRIDGE_STORAGE_KEY, BRIDGE_PORT_KEY]);
+  const enabled = stored[BRIDGE_STORAGE_KEY] === true;
+  const port = typeof stored[BRIDGE_PORT_KEY] === 'number' ? stored[BRIDGE_PORT_KEY] : undefined;
+
+  bridgeClient = new BridgeClient(port);
+
+  bridgeClient.setStateCallback((state) => {
+    const status: BridgeStatusMessage = { type: 'PAGE2AI_BRIDGE_STATUS', state };
+    void browser.runtime.sendMessage(status).catch(() => undefined);
+  });
+
+  if (enabled) {
+    void bridgeClient.enable();
+  }
+};
 
 const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promise<void> => {
   // Stage options in the tab's isolated world first: executeScript({ files })
@@ -47,6 +72,8 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
 };
 
 export default defineBackground(() => {
+  void initBridge();
+
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const msg = message as Page2aiMessage;
 
@@ -59,6 +86,13 @@ export default defineBackground(() => {
 
     if (msg?.type === 'PAGE2AI_RESULT' && sender.tab?.id != null) {
       const tabId = sender.tab.id;
+
+      // Bridge intercept: if this tab was created by a bridge convert request,
+      // route the result to the MCP server and close the tab.
+      if (bridgeClient?.onResult(tabId, msg.result, sender.tab.url ?? '')) {
+        return undefined;
+      }
+
       const cached: CachedResult = {
         result: msg.result,
         url: sender.tab.url ?? '',
@@ -67,6 +101,30 @@ export default defineBackground(() => {
       void browser.storage.session.set({ [resultCacheKey(tabId)]: cached });
       void browser.action.setBadgeBackgroundColor({ tabId, color: '#16a34a' });
       void browser.action.setBadgeText({ tabId, text: '✓' });
+    }
+
+    if (msg?.type === 'PAGE2AI_PROGRESS' && msg.step === STEP_INJECT_ERROR) {
+      const tabId = sender.tab?.id ?? msg.tabId;
+      if (tabId != null) {
+        bridgeClient?.onInjectError(tabId, msg.message);
+      }
+    }
+
+    if (msg?.type === 'PAGE2AI_BRIDGE_TOGGLE') {
+      void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: msg.enabled });
+      if (msg.enabled) {
+        void bridgeClient?.enable();
+      } else {
+        bridgeClient?.disable();
+      }
+      return undefined;
+    }
+
+    if (msg?.type === 'PAGE2AI_BRIDGE_STATUS') {
+      // Popup requesting current state — reply with bridge status
+      const state = bridgeClient?.getState() ?? 'disconnected';
+      sendResponse({ state });
+      return false;
     }
 
     return undefined;

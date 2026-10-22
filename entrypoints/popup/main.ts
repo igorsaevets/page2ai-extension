@@ -13,6 +13,7 @@ import {
   type ExtractRequestMessage,
   type Page2aiMessage,
 } from '~/lib/messages';
+import type { BridgeToggleMessage } from '~/lib/messages';
 import type { AutoProfile, ExtractResult } from '~/lib/types';
 
 type StatusTone = 'info' | 'busy' | 'ok' | 'warn' | 'error';
@@ -37,6 +38,8 @@ const el = {
   copy: $<HTMLButtonElement>('#copy'),
   download: $<HTMLButtonElement>('#download'),
   previewText: $<HTMLTextAreaElement>('#preview-text'),
+  bridgeToggle: $<HTMLInputElement>('#bridge-toggle'),
+  bridgeStatus: $<HTMLSpanElement>('#bridge-status'),
 };
 
 const MAX_LOG_ENTRIES = 300;
@@ -248,7 +251,38 @@ const init = async (): Promise<void> => {
     showResult(cached.result, { fromCache: true });
   }
 
+  // --- Agent Bridge toggle ---
+  const bridgeStored = await browser.storage.local.get('agentBridge');
+  el.bridgeToggle.checked = bridgeStored.agentBridge === true;
+  updateBridgeStatusText(el.bridgeToggle.checked ? 'connecting' : 'disconnected');
+
+  el.bridgeToggle.addEventListener('change', () => {
+    const enabled = el.bridgeToggle.checked;
+    const msg: BridgeToggleMessage = { type: 'PAGE2AI_BRIDGE_TOGGLE', enabled };
+    void browser.runtime.sendMessage(msg);
+    updateBridgeStatusText(enabled ? 'connecting' : 'disconnected');
+  });
+
   el.extract.focus();
 };
+
+const updateBridgeStatusText = (state: string): void => {
+  const labels: Record<string, string> = {
+    disconnected: '',
+    connecting: 'connecting…',
+    connected: 'connected',
+  };
+  el.bridgeStatus.textContent = labels[state] ?? '';
+  el.bridgeStatus.dataset.state = state;
+};
+
+const onBridgeStatus = (message: unknown): void => {
+  const msg = message as Page2aiMessage;
+  if (msg?.type === 'PAGE2AI_BRIDGE_STATUS') {
+    updateBridgeStatusText(msg.state);
+  }
+};
+
+browser.runtime.onMessage.addListener(onBridgeStatus);
 
 void init();

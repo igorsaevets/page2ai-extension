@@ -27,7 +27,24 @@ export interface ResultMessage {
   result: ExtractResult;
 }
 
-export type Page2aiMessage = ExtractRequestMessage | ProgressMessage | ResultMessage;
+/** popup → background: toggle the Agent Bridge on or off. */
+export interface BridgeToggleMessage {
+  type: 'PAGE2AI_BRIDGE_TOGGLE';
+  enabled: boolean;
+}
+
+/** background → popup: current Agent Bridge status. */
+export interface BridgeStatusMessage {
+  type: 'PAGE2AI_BRIDGE_STATUS';
+  state: 'disconnected' | 'connecting' | 'connected';
+}
+
+export type Page2aiMessage =
+  | ExtractRequestMessage
+  | ProgressMessage
+  | ResultMessage
+  | BridgeToggleMessage
+  | BridgeStatusMessage;
 
 /** background → popup: response to ExtractRequestMessage. */
 export interface ExtractAck {

@@ -251,3 +251,42 @@ select:focus-visible {
   font: 10.5px/1.5 var(--mono);
   padding: 8px;
 }
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+.bridge-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bridge-toggle input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.bridge-status {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.bridge-status[data-state='connected'] {
+  color: var(--ok);
+}
+
+.bridge-status[data-state='connecting'] {
+  color: var(--warn);
+}
