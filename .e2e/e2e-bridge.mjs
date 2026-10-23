@@ -89,7 +89,11 @@ const server = createServer((req, res) => {
   res.end(TEST_HTML);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const pageUrl = `http://127.0.0.1:${server.address().port}/agent/asked`;
+// A name only Chrome resolves (--host-resolver-rules below): @page2ai/mcp 0.5.4 refuses
+// loopback through the bridge, as its own fetch does, and passes a name it cannot
+// resolve on to the browser.
+const FIXTURE_HOST = 'agent-fixture.test';
+const pageUrl = `http://${FIXTURE_HOST}:${server.address().port}/agent/asked`;
 
 // The extension reads its port when the background starts, so the test takes
 // the default one, as a user does, and stops if anything else holds it (a
@@ -119,7 +123,10 @@ async function launch(headless) {
     headless,
     pipe: process.platform === 'win32',
     enableExtensions: [EXT_PATH],
-    args: ['--no-first-run', '--disable-features=ChromeWhatsNewUI', '--no-sandbox', '--disable-dev-shm-usage'],
+    args: ['--no-first-run', '--disable-features=ChromeWhatsNewUI', '--no-sandbox', '--disable-dev-shm-usage',
+      `--host-resolver-rules=MAP ${FIXTURE_HOST} 127.0.0.1`,
+      // Chrome sends Sec-Fetch-* (the route test below) only to a secure origin.
+      `--unsafely-treat-insecure-origin-as-secure=${new URL(pageUrl).origin}`],
   });
 }
 
@@ -262,8 +269,8 @@ try {
     check('page came through the extension', viaBrowser > 0 && viaServer === 0);
   } else {
     // No site access: the extension refuses before opening a tab, and the
-    // server answers by its own fetch, as it does without the bridge. For a
-    // 127.0.0.1 page that answer is the SSRF guard's refusal.
+    // server answers by its own fetch, as it does without the bridge. For this
+    // page that answer is a DNS failure: only Chrome maps the name.
     check('extension refused for missing site access', `${stderr}${text}`.includes('PERMISSION_REQUIRED'));
     check('no tab was opened for the page', viaBrowser === 0);
     check('server answered by its own route, not a bridge failure',
