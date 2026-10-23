@@ -5,18 +5,23 @@
 // `sec-fetch-mode` on a navigation, the server's own fetch does not.
 //
 // Run:  npm i --no-save puppeteer-core @page2ai/mcp
-//       npx wxt build --mode e2e   (grants http://127.0.0.1/*: a user who allowed the bridge)
+//       npx wxt build --mode e2e   (grants http(s)://*/*: a user who allowed the bridge)
 //       node .e2e/e2e-bridge.mjs
+// A missing install, build or Chrome, or port 3025 held by another program, ends
+// the run with «SETUP FAIL: <what to do>» and exit code 2.
 //
 // EXT_PATH   built extension dir (default .output/chrome-mv3-e2e)
 // MCP_ENTRY  the server's dist/index.js (default node_modules/@page2ai/mcp/dist/index.js)
 // EXPECT     'bridge' (default): the page must come through the extension;
 //            'fallback': the extension has no access to the page, so the
 //            server must still answer, by its own fetch.
-// MANUAL_GRANT=1  a visible Chrome; a person answers the switch's site-access
-//            prompt with Allow (browser UI no automation can click). With the
-//            production build this checks the one step CI cannot:
-//            EXT_PATH=.output/chrome-mv3 MANUAL_GRANT=1 node .e2e/e2e-bridge.mjs
+// MANUAL_GRANT=1  production build only: a visible Chrome shows the switch's real
+//            site-access prompt, and Allow must turn the bridge on by itself
+//            (the popup's own message is dropped, as when the toolbar popup
+//            closes under the prompt). Someone answers it, or on Windows
+//            .e2e/click-allow.py does, through UI Automation:
+//            EXT_PATH=.output/chrome-mv3 MANUAL_GRANT=1 node .e2e/e2e-bridge.mjs > run.log
+//            python .e2e/click-allow.py run.log
 
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
@@ -56,12 +61,26 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures++;
 };
 
-if (!['bridge', 'fallback'].includes(EXPECT)) throw new Error(`EXPECT must be bridge or fallback, got ${EXPECT}`);
-for (const [what, p] of [['extension', path.join(EXT_PATH, 'manifest.json')], ['MCP server', MCP_ENTRY]]) {
-  if (!existsSync(p)) throw new Error(`${what} not found: ${p}`);
+let browser;
+let mcp;
+// A missing piece stops the run with what to do, not a stack trace.
+const setupFail = async (why) => {
+  console.log(`SETUP FAIL: ${why}\n\nFAILED: setup`);
+  mcp?.kill();
+  await browser?.close().catch(() => {});
+  process.exit(2);
+};
+if (!['bridge', 'fallback'].includes(EXPECT)) await setupFail(`EXPECT must be bridge or fallback, got ${EXPECT}`);
+if (!existsSync(path.join(EXT_PATH, 'manifest.json'))) {
+  await setupFail(`no built extension in ${EXT_PATH}: run npx wxt build (production) or npx wxt build --mode e2e`);
+}
+if (!existsSync(MCP_ENTRY)) {
+  await setupFail(`no MCP server at ${MCP_ENTRY}: the install did not run or failed. ` +
+    'Run npm i --no-save puppeteer-core @page2ai/mcp@<version> and read its output; ' +
+    'npm view @page2ai/mcp version prints the newest version npm has');
 }
 const chromePath = CHROME_CANDIDATES.find((p) => existsSync(p));
-if (!chromePath) throw new Error('Chrome not found; set CHROME_PATH');
+if (!chromePath) await setupFail('Chrome not found; set CHROME_PATH');
 
 const hits = [];
 const server = createServer((req, res) => {
@@ -76,11 +95,23 @@ const pageUrl = `http://127.0.0.1:${server.address().port}/agent/asked`;
 // the default one, as a user does, and stops if anything else holds it (a
 // Claude Desktop or Cursor running @page2ai/mcp would win the connection).
 const bridgePort = 3025;
-await new Promise((resolve, reject) => {
+const portFree = await new Promise((resolve) => {
   const s = createNetServer();
-  s.once('error', () => reject(new Error(`port ${bridgePort} is in use: stop the other @page2ai/mcp first`)));
-  s.listen(bridgePort, '127.0.0.1', () => s.close(resolve));
+  s.once('error', () => resolve(false));
+  s.listen(bridgePort, '127.0.0.1', () => s.close(() => resolve(true)));
 });
+if (!portFree) {
+  let holder = '';
+  if (process.platform === 'win32') {
+    // netstat names the PID, tasklist the program: usually Claude Desktop or Cursor.
+    const { execSync } = await import('node:child_process');
+    const pid = execSync('netstat -ano -p tcp', { encoding: 'utf8' }).split('\n')
+      .find((l) => l.includes(`:${bridgePort} `) && /LISTENING/.test(l))?.trim().split(/\s+/).pop();
+    if (pid) holder = ` by ${execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, { encoding: 'utf8' }).split(',')[0].replace(/"/g, '')} (PID ${pid})`;
+  }
+  server.close();
+  await setupFail(`port ${bridgePort} is held${holder}: quit the app running @page2ai/mcp (Claude Desktop, Cursor, ...) and run again`);
+}
 
 async function launch(headless) {
   return puppeteer.launch({
@@ -93,7 +124,6 @@ async function launch(headless) {
 }
 
 const MANUAL = process.env.MANUAL_GRANT === '1';
-let browser;
 try {
   browser = await launch(!MANUAL);
 } catch (e) {
@@ -110,7 +140,6 @@ const waitFor = async (cond, ms) => {
   return cond();
 };
 
-let mcp;
 let stderr = '';
 try {
   // Chrome first: the extension's ID is the Origin the server has to accept.
@@ -166,12 +195,35 @@ try {
   // Opened in a tab, the popup's own chrome-extension:// page is the active
   // tab: a page it cannot extract, like the New Tab page for a real user. The
   // switch has to work there too.
-  if (MANUAL) console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
+  if (MANUAL) {
+    // The real toolbar popup can close when the prompt takes focus, and then only the
+    // background's permissions.onAdded can turn the bridge on. Model that: drop the
+    // message the popup sends after a grant.
+    const preGranted = await popup.evaluate(() =>
+      chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }));
+    if (preGranted) await setupFail('MANUAL_GRANT needs the production build (EXT_PATH=.output/chrome-mv3): this build already has site access, so no prompt appears');
+    await popup.evaluate(() => {
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      window.droppedToggles = 0;
+      chrome.runtime.sendMessage = (msg, ...rest) => {
+        if (msg?.type === 'PAGE2AI_BRIDGE_TOGGLE') { window.droppedToggles++; return Promise.resolve(); }
+        return send(msg, ...rest);
+      };
+    });
+    console.log(`browser pid: ${browser.process()?.pid ?? '?'}`);
+    console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
+  }
   await popup.click('#bridge-toggle');
   const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), MANUAL ? 120000 : 8000);
   const afterClick = await popup.$eval('#bridge-status', (n) => `${n.dataset.state}: ${n.textContent}`).catch(() => '?');
   console.log(`popup status after the switch: ${afterClick}`);
-  if (EXPECT === 'bridge') check('popup switch connects the bridge (on a page it cannot extract)', viaSwitch);
+  if (MANUAL) {
+    const dropped = await popup.evaluate(() => window.droppedToggles).catch(() => 0);
+    check('Allow alone turns the bridge on (background permissions.onAdded; popup message dropped)',
+      viaSwitch && dropped > 0, `dropped popup toggles: ${dropped}`);
+  } else if (EXPECT === 'bridge') {
+    check('popup switch connects the bridge (on a page it cannot extract)', viaSwitch);
+  }
   if (!viaSwitch) {
     // The fallback arm runs a production build: the switch asks for site
     // access and no one answers the prompt. Model a user who enabled the
