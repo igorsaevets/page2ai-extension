@@ -11,7 +11,9 @@ export default defineConfig({
     // Caught by `web-ext lint` before the AMO upload, not by AMO after it.
     author: browser === 'firefox' ? 'Igor Saevets' : { email: 'support@igorsaevets.com' },
     homepage_url: 'https://github.com/igorsaevets/page2ai-extension',
-    permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage'],
+    // alarms: the Agent Bridge retries a server started later every 30 s; a setTimeout
+    // dies with the service worker. No install warning (Chrome permissions list).
+    permissions: ['activeTab', 'scripting', 'clipboardWrite', 'storage', 'alarms'],
     // Agent Bridge only: requested by the popup's switch, never at install, so
     // an update adding it does not disable the extension (Chrome docs:
     // "Chrome won't disable it for your users if the upgrade adds optional

@@ -39,6 +39,8 @@ export const DEFAULTS: ExtractorConfig = {
   emitImageSrcsetCandidatesComment: false,
   typeLinkedImages: false,
   includeHiddenMeaningfulText: false,
+  includeImages: true,
+  includeFrontmatter: true,
   maxTextNodeLength: 5000,
   includeVisibleAriaHiddenText: true,
   minAriaHiddenTextLength: 1,

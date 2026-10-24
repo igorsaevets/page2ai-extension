@@ -13,6 +13,10 @@
 //   silent    a program that takes the socket and never answers: the popup must
 //             name it as not Page2AI once the extension cuts it.
 //   no key    the real server without PAGE2AI_BRIDGE_KEY: the popup must say so.
+// After the paired call (1.6.0): include_images / include_frontmatter false must reach the
+// extractor; a page that redirects to a private address must be refused by the extension
+// before anything runs there; a server started while the service worker sleeps must be
+// reached by the reconnect alarm alone, no tab moving meanwhile.
 //
 // Run:  npm i --no-save puppeteer-core @page2ai/mcp
 //       npx wxt build --mode e2e   (grants http(s)://*/*: a user who allowed the bridge)
@@ -66,7 +70,11 @@ const TEST_HTML = `<!doctype html>
   <h1>Bridge Fixture</h1>
   <p>An agent asked for this page through the Page2AI MCP server. ${MARKER}</p>
   <p>A second paragraph, so the extractor has a body to keep.</p>
+  <p><img src="/img/bridge-diagram.png" alt="A diagram of the agent bridge fixture page"></p>
 </main></body></html>`;
+const PRIVATE_MARKER = `private-page-${Date.now().toString(36)}`;
+const PRIVATE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Router admin</title></head>
+<body><main><h1>Router admin</h1><p>A page on a private address. ${PRIVATE_MARKER}</p></main></body></html>`;
 
 let failures = 0;
 const check = (name, ok, detail = '') => {
@@ -100,8 +108,13 @@ if (!chromePath) await setupFail('Chrome not found; set CHROME_PATH');
 const hits = [];
 const server = createServer((req, res) => {
   hits.push({ browser: Boolean(req.headers['sec-fetch-mode']), path: req.url ?? '' });
+  if (req.url === '/agent/redirect-private') {
+    res.writeHead(302, { location: `http://127.0.0.1:${server.address().port}/private/landed` });
+    res.end();
+    return;
+  }
   res.setHeader('content-type', 'text/html; charset=utf-8');
-  res.end(TEST_HTML);
+  res.end(req.url?.startsWith('/private/') ? PRIVATE_HTML : TEST_HTML);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 // A name only Chrome resolves (--host-resolver-rules below): @page2ai/mcp 0.5.4 refuses
@@ -412,6 +425,43 @@ try {
     check('tool answered without an error', Boolean(call) && !isError);
     check('answer holds the page marker', text.includes(MARKER));
     check('page came through the extension', viaBrowser > 0 && viaServer === 0);
+
+    // include_images / include_frontmatter: bfba0b8 sent them and the extractor ignored them.
+    check('default options keep the image and the frontmatter', text.includes('![') && /^---\n/.test(text));
+    const bare = await rpc(3, 'tools/call', {
+      name: 'page_to_markdown',
+      arguments: { url: `${origin}/agent/options-off`, timeout_ms: 15000, include_images: false, include_frontmatter: false },
+    }, 60000);
+    const bareText = bare?.result?.content?.[0]?.text ?? '';
+    check('include_images and include_frontmatter false: no image, no frontmatter',
+      bareText.includes(MARKER) && !bareText.includes('![') && !/^captured_at: /m.test(bareText),
+      bareText.slice(0, 120).replace(/\n/g, ' | '));
+
+    // A page that redirects to a private address. bfba0b8 ran the extractor there and
+    // only the server's check of the landed URL kept the text from the agent.
+    const redir = await rpc(4, 'tools/call', {
+      name: 'page_to_markdown',
+      arguments: { url: `${origin}/agent/redirect-private`, timeout_ms: 15000 },
+    }, 60000);
+    const redirText = (redir?.result?.content ?? []).map((c) => c.text ?? '').join('\n');
+    check('redirect to a private address: the extension refuses the page it landed on',
+      !redirText.includes(PRIVATE_MARKER) && `${stderr}${redirText}`.includes('RESTRICTED_URL'),
+      redirText.slice(0, 160).replace(/\n/g, ' | '));
+
+    if (pairedRun) {
+      // A server started while the service worker sleeps. bfba0b8 retried by setTimeout,
+      // which dies with the worker, so it waited for some tab event. Nothing moves here.
+      await stopMcp();
+      const swNow = await browser.waitForTarget(
+        (t) => t.type() === 'service_worker' && t.url().endsWith('background.js'), { timeout: 10000 });
+      await (await swNow.worker()).close();
+      await sleep(2000);
+      stderr = '';
+      startMcp(serverKey);
+      check('restarted server listening', await waitFor(() => stderr.includes('bridge listening'), 15000));
+      const woke = await waitFor(() => stderr.includes('bridge: extension connected'), 45000);
+      check('a server started while the service worker slept is reached (reconnect alarm)', woke);
+    }
   } else {
     // No site access: the extension refuses before opening a tab, and the
     // server answers by its own fetch, as it does without the bridge. For this

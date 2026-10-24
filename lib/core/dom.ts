@@ -196,8 +196,11 @@ export const shouldSkipImage = (
     | 'filterDecorativeAlt'
     | 'decorativeAltPattern'
     | 'decorativeAltMaxWords'
+    | 'includeImages'
   >,
 ): boolean => {
+  // Every image branch of the renderer asks here, so includeImages: false drops them all.
+  if (config.includeImages === false) return true;
   if (isDecorativeImageSrc(src, config)) return true;
   if (isDecorativeAlt(alt, config)) return true;
   return false;

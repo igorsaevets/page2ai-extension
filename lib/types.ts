@@ -75,6 +75,10 @@ export interface ExtractorConfig {
   emitImageSrcsetCandidatesComment: boolean;
   typeLinkedImages: boolean;
   includeHiddenMeaningfulText: boolean;
+  // The MCP tool's include_images / include_frontmatter, sent by the Agent Bridge.
+  // The popup leaves both on.
+  includeImages: boolean;
+  includeFrontmatter: boolean;
   maxTextNodeLength: number;
   includeVisibleAriaHiddenText: boolean;
   minAriaHiddenTextLength: number;

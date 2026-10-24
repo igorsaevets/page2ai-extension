@@ -474,7 +474,7 @@ export const runExtractor = async (
     // Only surfaced when the gate actually ran. On a server-rendered page these
     // keys would be noise in every single file; on a client-rendered one they are
     // the difference between "this page is short" and "we gave up early".
-    const fm = buildFrontmatter(
+    const fm = !config.includeFrontmatter ? [] : buildFrontmatter(
       ctx,
       spaReadiness.engaged
         ? {

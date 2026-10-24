@@ -16,7 +16,7 @@ import {
   type Page2aiMessage,
   type ProgressMessage,
 } from '~/lib/messages';
-import { BridgeClient, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
+import { BridgeClient, RECONNECT_ALARM, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
 
 const errorText = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
@@ -92,6 +92,14 @@ const startExtraction = async ({ tabId, options }: ExtractRequestMessage): Promi
 export default defineBackground(() => {
   // A toggle can arrive while initBridge still awaits storage: chain on it.
   const bridgeReady = initBridge();
+
+  // Both wake a sleeping worker, and waking runs initBridge above: the alarm every
+  // 30 s while the bridge is on and not connected (a server started later), the
+  // startup event once per browser start (alarms may not survive a restart).
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === RECONNECT_ALARM) void bridgeReady.then(() => bridgeClient?.onAlarm(alarm.name));
+  });
+  browser.runtime.onStartup.addListener(() => undefined);
 
   // The grant itself turns the bridge on: the popup that asked may be gone by
   // the time the user answers the prompt, and its .then with it. A revoke
