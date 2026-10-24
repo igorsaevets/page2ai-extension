@@ -20,6 +20,11 @@ const DEFAULT_PORT = 3025;
 const PING_INTERVAL_MS = 20_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const HANDSHAKE_MS = 10_000;
+// The retry that outlives the service worker: a setTimeout dies with it after
+// 30 s idle, so a server started later was reached only when some event woke
+// the worker. Chrome fires alarms at most every 30 s (unpacked: no limit).
+export const RECONNECT_ALARM = 'page2ai-bridge-reconnect';
+const RECONNECT_ALARM_MINUTES = 0.5;
 
 const RESTRICTED_DOMAINS = new Set([
   'accounts.google.com',
@@ -35,6 +40,26 @@ const RESTRICTED_DOMAINS = new Set([
 // The bridge opens web pages only. An allowlist, not a list of bad schemes:
 // file:, data:, blob: and javascript: were all reachable through the old one.
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
+
+// Loopback, private, link-local and shared (CGNAT) addresses written as
+// literals, and localhost names. @page2ai/mcp refuses them on every route; a
+// page that redirects to one is not read here either, so the extractor never
+// clicks through, say, a router's admin page. A name that resolves to such an
+// address stays the server's check: an extension cannot resolve names.
+const isPrivateHost = (host: string): boolean => {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(h);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  // IPv6: unspecified, loopback, unique local fc00::/7, link-local fe80::/10, IPv4-mapped.
+  return h.includes(':') &&
+    (h === '::' || h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith('::ffff:'));
+};
 
 // ── key ─────────────────────────────────────────────────────────────────
 
@@ -137,15 +162,25 @@ export class BridgeClient {
     if (port != null) this.port = port;
     this.enabled = true;
     this.reconnectAttempt = 0;
+    // Made again on every start: Chrome may drop alarms on a browser restart.
+    void browser.alarms.create(RECONNECT_ALARM, { periodInMinutes: RECONNECT_ALARM_MINUTES });
     void this.connect();
   }
 
   disable(): void {
     this.enabled = false;
     this.connectGen++;
+    void browser.alarms.clear(RECONNECT_ALARM);
     this.clearReconnect();
     this.cleanup();
     this.setProblem(null);
+  }
+
+  /** The reconnect alarm woke the worker (or fired while it ran): try now if idle. */
+  onAlarm(name: string): void {
+    if (name !== RECONNECT_ALARM || !this.enabled || this.state !== 'disconnected') return;
+    this.clearReconnect();
+    void this.connect();
   }
 
   /** A new key: drop the connection made with the old one and pair again. */
@@ -169,7 +204,13 @@ export class BridgeClient {
 
     clearTimeout(pending.timer);
     this.pending.delete(tabId);
-    this.sendConvertResult(pending.requestId, result, tabUrl);
+    // Checked after the load too; a script can still move the page meanwhile.
+    if (this.isRestrictedUrl(tabUrl)) {
+      this.sendError(pending.requestId, 'RESTRICTED_URL',
+        `The page moved to ${this.safeHostname(tabUrl)}, which the Agent Bridge does not read`);
+    } else {
+      this.sendConvertResult(pending.requestId, result, tabUrl);
+    }
     browser.tabs.remove(tabId).catch(() => undefined);
     return true;
   }
@@ -393,22 +434,28 @@ export class BridgeClient {
 
   // ── convert request ───────────────────────────────────────────────────
 
-  private async handleConvert(req: ConvertRequest): Promise<void> {
-    if (this.isRestrictedUrl(req.url)) {
-      this.sendError(req.id, 'RESTRICTED_URL',
-        `Refused to extract sensitive URL: ${this.safeHostname(req.url)}`);
-      return;
+  /** Why the bridge may not read this URL, or null. Asked for the URL the server
+   *  sent and again for the page the tab ended on: a redirect can lead anywhere. */
+  private async refusal(url: string): Promise<{ code: string; message: string } | null> {
+    if (this.isRestrictedUrl(url)) {
+      return { code: 'RESTRICTED_URL', message: `Refused to extract sensitive URL: ${this.safeHostname(url)}` };
     }
-
-    // Check site access before opening anything: without it the tab would load
-    // and the injection fail. Match patterns carry no port.
-    const { protocol, hostname } = new URL(req.url);
+    // Without site access the tab would load and the injection fail. Match
+    // patterns carry no port.
+    const { protocol, hostname } = new URL(url);
     const hasAccess = await browser.permissions
       .contains({ origins: [`${protocol}//${hostname}/*`] })
       .catch(() => false);
-    if (!hasAccess) {
-      this.sendError(req.id, 'PERMISSION_REQUIRED',
-        `Page2AI has no access to ${hostname}: turn the Agent Bridge switch in the Page2AI popup off and on to grant site access`);
+    return hasAccess ? null : {
+      code: 'PERMISSION_REQUIRED',
+      message: `Page2AI has no access to ${hostname}: turn the Agent Bridge switch in the Page2AI popup off and on to grant site access`,
+    };
+  }
+
+  private async handleConvert(req: ConvertRequest): Promise<void> {
+    const refused = await this.refusal(req.url);
+    if (refused) {
+      this.sendError(req.id, refused.code, refused.message);
       return;
     }
 
@@ -439,12 +486,33 @@ export class BridgeClient {
       await this.waitForTabLoad(tabId, timeoutMs);
       if (!this.pending.has(tabId)) return; // timed out while waiting
 
+      // The browser has followed any redirect by now. Nothing runs in the page the
+      // tab ended on before it passes the checks the asked URL passed.
+      const landed = await browser.tabs.get(tabId).then((t) => t.url ?? '', () => '');
+      const landedRefusal = await this.refusal(landed);
+      if (!this.pending.has(tabId)) return;
+      if (landedRefusal) {
+        clearTimeout(this.pending.get(tabId)!.timer);
+        this.pending.delete(tabId);
+        browser.tabs.remove(tabId).catch(() => undefined);
+        this.sendError(req.id, landedRefusal.code,
+          `The page redirected to ${this.safeHostname(landed)}. ${landedRefusal.message}`);
+        return;
+      }
+
       await browser.scripting.executeScript({
         target: { tabId },
         func: (key: string, opts: unknown) => {
           (globalThis as Record<string, unknown>)[key] = opts;
         },
-        args: [OPTIONS_GLOBAL_KEY, { profile: 'auto' }],
+        // The agent's include_images / include_frontmatter (ignored before 1.6.0).
+        args: [OPTIONS_GLOBAL_KEY, {
+          profile: 'auto',
+          overrides: {
+            includeImages: req.options.includeImages !== false,
+            includeFrontmatter: req.options.includeFrontmatter !== false,
+          },
+        }],
       });
 
       void browser.scripting
@@ -565,7 +633,8 @@ export class BridgeClient {
       const parsed = new URL(url);
       if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) return true;
       // `accounts.google.com.` (trailing dot) is the same host.
-      return RESTRICTED_DOMAINS.has(parsed.hostname.replace(/\.$/, ''));
+      const host = parsed.hostname.replace(/\.$/, '');
+      return RESTRICTED_DOMAINS.has(host) || isPrivateHost(host);
     } catch {
       return true;
     }
