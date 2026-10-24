@@ -49,7 +49,7 @@ Page2AI grabs the actual content. It captures hidden tabs. It outputs Markdown w
 
 ## Install
 
-Works in Chrome, Firefox, Edge, Brave, Arc, Vivaldi, and other Chromium browsers.
+Works in Chrome, Firefox, Edge, Brave, Arc, Vivaldi, and other Chromium browsers. Every surface, step by step: [install guide](https://igorsaevets.github.io/page2ai-docs/install/).
 
 ### Chrome Web Store (recommended)
 
@@ -150,6 +150,8 @@ Source and docs: [page2ai-mcp](https://github.com/igorsaevets/page2ai-mcp) | [pa
 | 100% local, zero telemetry | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Minimum permissions (no `<all_urls>`) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
+Longer reads: [Webpage to Markdown Chrome extension: 6 options compared](https://igorsaevets.github.io/page2ai-docs/webpage-to-markdown-chrome-extension/) · [how Page2AI compares to other converters](https://igorsaevets.github.io/page2ai-docs/comparison/).
+
 ## Features
 
 **Profile-aware extraction.** Auto-detects the site kind (docs, marketing, research, dashboard, WordPress marketing) and tunes strategy per profile.
@@ -183,7 +185,7 @@ Page2AI does not send data anywhere.
 - Nothing stored beyond your local preferences (`chrome.storage.local`).
 - Nothing shared cross-site or cross-tab beyond the tab you clicked.
 
-The extension only reads the page you explicitly acted on (`activeTab` gesture). Full details in [PRIVACY.md](PRIVACY.md).
+The extension only reads the page you explicitly acted on (`activeTab` gesture). Full details in [PRIVACY.md](PRIVACY.md) and the [privacy policy](https://igorsaevets.github.io/page2ai-docs/privacy/).
 
 ## Permissions
 
