@@ -227,6 +227,11 @@ export class BridgeClient {
     return this.pending.has(tabId);
   }
 
+  /** A convert request is in flight: a reload now would drop it (lib/update-reload.ts). */
+  isBusy(): boolean {
+    return this.pending.size > 0;
+  }
+
   /** Called by the background message handler when a PAGE2AI_RESULT arrives.
    *  Returns true if the result is of the run a bridge convert started (consumed).
    *  `tabUrl` and `documentId` are the sending document's (MessageSender);
