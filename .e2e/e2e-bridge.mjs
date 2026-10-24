@@ -444,8 +444,11 @@ try {
       arguments: { url: `${origin}/agent/redirect-private`, timeout_ms: 15000 },
     }, 60000);
     const redirText = (redir?.result?.content ?? []).map((c) => c.text ?? '').join('\n');
+    // «redirected to» is the landed-page check, before anything is injected; the check of
+    // the result's document says «moved to», which would mean the extractor ran there.
     check('redirect to a private address: the extension refuses the page it landed on',
-      !redirText.includes(PRIVATE_MARKER) && `${stderr}${redirText}`.includes('RESTRICTED_URL'),
+      !redirText.includes(PRIVATE_MARKER) && `${stderr}${redirText}`.includes('RESTRICTED_URL') &&
+      `${stderr}${redirText}`.includes('The page redirected to'),
       redirText.slice(0, 160).replace(/\n/g, ' | '));
 
     if (pairedRun) {
@@ -459,7 +462,9 @@ try {
       stderr = '';
       startMcp(serverKey);
       check('restarted server listening', await waitFor(() => stderr.includes('bridge listening'), 15000));
-      const woke = await waitFor(() => stderr.includes('bridge: extension connected'), 45000);
+      // The alarm fires within 30 s of the worker's last start; Chrome may run it later
+      // than asked, and the wait ends as soon as the extension connects.
+      const woke = await waitFor(() => stderr.includes('bridge: extension connected'), 75000);
       check('a server started while the service worker slept is reached (reconnect alarm)', woke);
     }
   } else {

@@ -41,24 +41,35 @@ const RESTRICTED_DOMAINS = new Set([
 // file:, data:, blob: and javascript: were all reachable through the old one.
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
 
-// Loopback, private, link-local and shared (CGNAT) addresses written as
-// literals, and localhost names. @page2ai/mcp refuses them on every route; a
-// page that redirects to one is not read here either, so the extractor never
-// clicks through, say, a router's admin page. A name that resolves to such an
-// address stays the server's check: an extension cannot resolve names.
+// Loopback, private, link-local, shared (CGNAT) and other non-public addresses
+// written as literals, and localhost and metadata names. @page2ai/mcp refuses
+// them on every route; a page that redirects to one is not read here either, so
+// the extractor never clicks through, say, a router's admin page. A name that
+// resolves to such an address stays the server's check: an extension cannot
+// resolve names. The lists are @page2ai/core's (src/node/ssrf-guard.ts);
+// WHATWG URL parsing has already turned hex, octal and dotless IPv4 into a
+// dotted quad and compressed IPv6.
+const BLOCKED_IPV4: RegExp[] = [
+  /^127\./, /^10\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./, /^0\./,
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // 100.64.0.0/10 CGNAT
+  /^(22[4-9]|23\d)\./, // 224.0.0.0/4 multicast
+  /^(24\d|25[0-5])\./, // 240.0.0.0/4 reserved, 255.255.255.255
+  /^192\.0\.[02]\./, /^192\.88\.99\./, /^198\.51\.100\./, /^203\.0\.113\./, /^198\.1[89]\./,
+];
+// Unique local fc00::/7, link-local fe80::/10, IPv4-mapped, NAT64 and 6to4 (both
+// embed an IPv4 address), documentation, discard, Teredo 2001::/32 (two forms).
+const BLOCKED_IPV6_PREFIXES = [
+  'fc', 'fd', 'fe8', 'fe9', 'fea', 'feb', '::ffff:', '64:ff9b:', '2002:', '2001:db8:', '100:',
+  '2001::', '2001:0:',
+];
+const BLOCKED_NAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
+
 const isPrivateHost = (host: string): boolean => {
   const h = host.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(h);
-  if (v4) {
-    const a = Number(v4[1]);
-    const b = Number(v4[2]);
-    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-  }
-  // IPv6: unspecified, loopback, unique local fc00::/7, link-local fe80::/10, IPv4-mapped.
+  if (BLOCKED_NAMES.has(h) || h.endsWith('.localhost')) return true;
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return BLOCKED_IPV4.some((p) => p.test(h));
   return h.includes(':') &&
-    (h === '::' || h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith('::ffff:'));
+    (h === '::' || h === '::1' || BLOCKED_IPV6_PREFIXES.some((p) => h.startsWith(p)));
 };
 
 // ── key ─────────────────────────────────────────────────────────────────
@@ -115,6 +126,8 @@ interface PendingConvert {
   tabId: number;
   url: string;
   timer: ReturnType<typeof setTimeout>;
+  // The document the checks passed and the extractor went into (Chrome 106+).
+  documentId?: string;
 }
 
 type BridgeState = 'disconnected' | 'connecting' | 'connected';
@@ -197,15 +210,19 @@ export class BridgeClient {
   }
 
   /** Called by the background message handler when a PAGE2AI_RESULT arrives.
-   *  Returns true if the result belonged to a bridge-created tab (consumed). */
-  onResult(tabId: number, result: ExtractResult, tabUrl: string): boolean {
+   *  Returns true if the result belonged to a bridge-created tab (consumed).
+   *  `tabUrl` and `documentId` are the sending document's (MessageSender). */
+  onResult(tabId: number, result: ExtractResult, tabUrl: string, documentId?: string): boolean {
     const pending = this.pending.get(tabId);
     if (!pending) return false;
 
     clearTimeout(pending.timer);
     this.pending.delete(tabId);
     // Checked after the load too; a script can still move the page meanwhile.
-    if (this.isRestrictedUrl(tabUrl)) {
+    if (pending.documentId && documentId && documentId !== pending.documentId) {
+      this.sendError(pending.requestId, 'RESTRICTED_URL',
+        'The page changed before its result came back; the Agent Bridge returns only the page it checked');
+    } else if (this.isRestrictedUrl(tabUrl)) {
       this.sendError(pending.requestId, 'RESTRICTED_URL',
         `The page moved to ${this.safeHostname(tabUrl)}, which the Agent Bridge does not read`);
     } else {
@@ -500,10 +517,17 @@ export class BridgeClient {
         return;
       }
 
-      await browser.scripting.executeScript({
+      // A tab target means whatever document the tab holds when the call lands, and
+      // a script or meta refresh can commit another one after the check above. So
+      // the options call reports the document it ran in, that document's own URL
+      // is checked, and the extractor goes into that document only: pinned by
+      // documentIds, and it runs only where the options were staged (Chrome 155
+      // sends a pin on a document now in the back/forward cache to the current one).
+      const [staged] = await browser.scripting.executeScript({
         target: { tabId },
         func: (key: string, opts: unknown) => {
           (globalThis as Record<string, unknown>)[key] = opts;
+          return location.href;
         },
         // The agent's include_images / include_frontmatter (ignored before 1.6.0).
         args: [OPTIONS_GLOBAL_KEY, {
@@ -514,9 +538,25 @@ export class BridgeClient {
           },
         }],
       });
+      const pending = this.pending.get(tabId);
+      if (!pending) return;
+      const docUrl = typeof staged?.result === 'string' ? staged.result : landed;
+      // The call ran, so the site access is there; what is left is the URL itself.
+      if (this.isRestrictedUrl(docUrl)) {
+        clearTimeout(pending.timer);
+        this.pending.delete(tabId);
+        browser.tabs.remove(tabId).catch(() => undefined);
+        this.sendError(req.id, 'RESTRICTED_URL',
+          `The page moved to ${this.safeHostname(docUrl)} before the extractor ran, which the Agent Bridge does not read`);
+        return;
+      }
+      pending.documentId = staged?.documentId;
 
       void browser.scripting
-        .executeScript({ target: { tabId }, files: ['/extractor.js'] })
+        .executeScript({
+          target: pending.documentId ? { tabId, documentIds: [pending.documentId] } : { tabId },
+          files: ['/extractor.js'],
+        })
         .catch((e) => {
           if (this.pending.has(tabId)) {
             clearTimeout(this.pending.get(tabId)!.timer);

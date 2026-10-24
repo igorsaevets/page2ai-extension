@@ -8,6 +8,7 @@ import {
   OPTIONS_GLOBAL_KEY,
   RUNNING_GLOBAL_KEY,
   STEP_BUSY,
+  STEP_INJECT_ERROR,
   type ProgressMessage,
   type ResultMessage,
 } from '~/lib/messages';
@@ -34,6 +35,19 @@ export default defineUnlistedScript(async () => {
       step: STEP_BUSY,
       message: 'Extraction is already running in this tab',
       level: 'warn',
+    });
+    return;
+  }
+  // Every caller stages the options in the document first, and an isolated world
+  // belongs to one document. None here means this is not the document the caller
+  // checked: Chrome 155 runs a documentIds target that names a document now in the
+  // back/forward cache in the tab's current document instead (T176).
+  if (!(OPTIONS_GLOBAL_KEY in g)) {
+    send({
+      type: 'PAGE2AI_PROGRESS',
+      step: STEP_INJECT_ERROR,
+      message: 'The page changed before the extractor started: run the extraction again',
+      level: 'error',
     });
     return;
   }
