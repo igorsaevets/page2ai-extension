@@ -4,6 +4,13 @@
 // back. The fixture server tells the two routes apart: Chrome sends
 // `sec-fetch-mode` on a navigation, the server's own fetch does not.
 //
+// page2ai-bridge/2 (@page2ai/mcp 0.6.0): the server holds the key the popup shows.
+// Before the real server, the bridge arm runs two others on port 3025:
+//   squatter  a program that took the port without the key; it answers the hello
+//             with a welcome (round 1) or a challenge with a made-up proof (round 2),
+//             each followed by a convert. No tab may open, no proof may leave.
+//   no key    the real server without PAGE2AI_BRIDGE_KEY: the popup must say so.
+//
 // Run:  npm i --no-save puppeteer-core @page2ai/mcp
 //       npx wxt build --mode e2e   (grants http(s)://*/*: a user who allowed the bridge)
 //       node .e2e/e2e-bridge.mjs
@@ -26,6 +33,8 @@
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -34,6 +43,7 @@ import puppeteer from 'puppeteer-core';
 const EXT_PATH = path.resolve(process.env.EXT_PATH ?? '.output/chrome-mv3-e2e');
 const MCP_ENTRY = path.resolve(process.env.MCP_ENTRY ?? 'node_modules/@page2ai/mcp/dist/index.js');
 const EXPECT = process.env.EXPECT ?? 'bridge';
+const MANUAL = process.env.MANUAL_GRANT === '1';
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -63,10 +73,12 @@ const check = (name, ok, detail = '') => {
 
 let browser;
 let mcp;
+let squatter;
 // A missing piece stops the run with what to do, not a stack trace.
 const setupFail = async (why) => {
   console.log(`SETUP FAIL: ${why}\n\nFAILED: setup`);
   mcp?.kill();
+  squatter?.close();
   await browser?.close().catch(() => {});
   process.exit(2);
 };
@@ -84,7 +96,7 @@ if (!chromePath) await setupFail('Chrome not found; set CHROME_PATH');
 
 const hits = [];
 const server = createServer((req, res) => {
-  hits.push({ browser: Boolean(req.headers['sec-fetch-mode']), ua: req.headers['user-agent'] ?? '' });
+  hits.push({ browser: Boolean(req.headers['sec-fetch-mode']), path: req.url ?? '' });
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.end(TEST_HTML);
 });
@@ -93,7 +105,9 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 // loopback through the bridge, as its own fetch does, and passes a name it cannot
 // resolve on to the browser.
 const FIXTURE_HOST = 'agent-fixture.test';
-const pageUrl = `http://${FIXTURE_HOST}:${server.address().port}/agent/asked`;
+const origin = `http://${FIXTURE_HOST}:${server.address().port}`;
+const pageUrl = `${origin}/agent/asked`;
+const browserHits = (prefix) => hits.filter((h) => h.browser && h.path.startsWith(prefix)).length;
 
 // The extension reads its port when the background starts, so the test takes
 // the default one, as a user does, and stops if anything else holds it (a
@@ -126,11 +140,10 @@ async function launch(headless) {
     args: ['--no-first-run', '--disable-features=ChromeWhatsNewUI', '--no-sandbox', '--disable-dev-shm-usage',
       `--host-resolver-rules=MAP ${FIXTURE_HOST} 127.0.0.1`,
       // Chrome sends Sec-Fetch-* (the route test below) only to a secure origin.
-      `--unsafely-treat-insecure-origin-as-secure=${new URL(pageUrl).origin}`],
+      `--unsafely-treat-insecure-origin-as-secure=${origin}`],
   });
 }
 
-const MANUAL = process.env.MANUAL_GRANT === '1';
 try {
   browser = await launch(!MANUAL);
 } catch (e) {
@@ -141,29 +154,24 @@ try {
 const waitFor = async (cond, ms) => {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    if (cond()) return true;
+    if (await cond()) return true;
     await new Promise((r) => setTimeout(r, 100));
   }
   return cond();
 };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- the MCP server over stdio -------------------------------------------
 let stderr = '';
-try {
-  // Chrome first: the extension's ID is the Origin the server has to accept.
-  const swTarget = await browser.waitForTarget(
-    (t) => t.type() === 'service_worker' && t.url().endsWith('background.js'),
-    { timeout: 20000 },
-  );
-  const extensionId = new URL(swTarget.url()).host;
-  const sw = await swTarget.worker();
-  console.log(`extension: ${EXT_PATH} (${extensionId})`);
-  console.log(`server:    ${MCP_ENTRY}`);
-  console.log(`expect:    ${EXPECT}; page ${pageUrl}; bridge port ${bridgePort}`);
-
+let stdoutBuf = '';
+const waiters = new Map();
+const startMcp = (key) => {
+  stdoutBuf = '';
   mcp = spawn(process.execPath, [MCP_ENTRY], {
     env: {
       ...process.env,
       PAGE2AI_BRIDGE_PORT: String(bridgePort),
+      PAGE2AI_BRIDGE_KEY: key,
       // An unpacked build has its own ID, not the store's. E2E_NO_ORIGIN=1 is
       // the negative control: the server must then refuse this extension.
       PAGE2AI_BRIDGE_ORIGINS: process.env.E2E_NO_ORIGIN ? '' : `chrome-extension://${extensionId}`,
@@ -171,8 +179,6 @@ try {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   mcp.stderr.on('data', (d) => { stderr += d; });
-  let stdoutBuf = '';
-  const waiters = new Map();
   mcp.stdout.on('data', (d) => {
     stdoutBuf += d;
     let i;
@@ -187,62 +193,154 @@ try {
       }
     }
   });
-  const rpc = (id, method, params, ms) => new Promise((resolve) => {
-    waiters.set(id, resolve);
-    mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
-    setTimeout(() => { if (waiters.delete(id)) resolve(null); }, ms);
-  });
+};
+const stopMcp = async () => {
+  if (!mcp || mcp.exitCode !== null) return;
+  const exited = new Promise((r) => mcp.once('exit', r));
+  mcp.kill();
+  await exited;
+};
+const rpc = (id, method, params, ms) => new Promise((resolve) => {
+  waiters.set(id, resolve);
+  mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+  setTimeout(() => { if (waiters.delete(id)) resolve(null); }, ms);
+});
 
-  check('server bridge listening', await waitFor(() => stderr.includes('bridge listening'), 15000));
+let extensionId = '';
+try {
+  // Chrome first: the extension's ID is the Origin the server has to accept.
+  const swTarget = await browser.waitForTarget(
+    (t) => t.type() === 'service_worker' && t.url().endsWith('background.js'),
+    { timeout: 20000 },
+  );
+  extensionId = new URL(swTarget.url()).host;
+  console.log(`extension: ${EXT_PATH} (${extensionId})`);
+  console.log(`server:    ${MCP_ENTRY}`);
+  console.log(`expect:    ${EXPECT}; page ${pageUrl}; bridge port ${bridgePort}`);
 
-  // The user's path: the popup's Agent Bridge switch, clicked.
+  // The popup in a tab: its own chrome-extension:// page is then the active tab,
+  // a page it cannot extract, like the New Tab page for a real user. The switch
+  // has to work there too.
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'load' });
   await popup.waitForSelector('#bridge-toggle', { timeout: 10000 });
-  // Opened in a tab, the popup's own chrome-extension:// page is the active
-  // tab: a page it cannot extract, like the New Tab page for a real user. The
-  // switch has to work there too.
-  if (MANUAL) {
-    // The real toolbar popup can close when the prompt takes focus, and then only the
-    // background's permissions.onAdded can turn the bridge on. Model that: drop the
-    // message the popup sends after a grant.
-    const preGranted = await popup.evaluate(() =>
-      chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }));
-    if (preGranted) await setupFail('MANUAL_GRANT needs the production build (EXT_PATH=.output/chrome-mv3): this build already has site access, so no prompt appears');
-    await popup.evaluate(() => {
-      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
-      window.droppedToggles = 0;
-      chrome.runtime.sendMessage = (msg, ...rest) => {
-        if (msg?.type === 'PAGE2AI_BRIDGE_TOGGLE') { window.droppedToggles++; return Promise.resolve(); }
-        return send(msg, ...rest);
-      };
-    });
-    console.log(`browser pid: ${browser.process()?.pid ?? '?'}`);
-    console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
+  const bridgeStatus = () => popup.$eval('#bridge-status',
+    (n) => ({ state: n.dataset.state ?? '', problem: n.dataset.problem ?? '', text: n.textContent ?? '' })).catch(() => ({}));
+  const helpText = () => popup.$eval('#bridge-help', (n) => n.textContent ?? '').catch(() => '');
+  // What the switch sends after a grant; off then on also restarts the backoff.
+  const toggle = (on) => popup.evaluate((enabled) => chrome.runtime.sendMessage({ type: 'PAGE2AI_BRIDGE_TOGGLE', enabled }), on);
+  const reconnect = async () => { await toggle(false); await sleep(200); await toggle(true); };
+  // The key, made on first use; an extension older than page2ai-bridge/2 has none.
+  const key = await popup.evaluate(() => chrome.runtime.sendMessage({ type: 'PAGE2AI_BRIDGE_KEY' }))
+    .then((r) => r?.key ?? '').catch(() => '');
+  check('the extension made a key in the format the server reads', /^[A-Za-z0-9_-]{43}$/.test(key));
+
+  const pairedRun = EXPECT === 'bridge' && !MANUAL;
+  if (pairedRun) {
+    // --- squatter: a program on the port without the key ---------------------
+    const { WebSocketServer } = createRequire(MCP_ENTRY)('ws');
+    const squat = { hellos: 0, auths: 0, other: [] };
+    squatter = new WebSocketServer({ host: '127.0.0.1', port: bridgePort });
+    await new Promise((resolve, reject) => { squatter.once('listening', resolve); squatter.once('error', reject); });
+    squatter.on('connection', (ws) => ws.on('message', (data) => {
+      let m;
+      try { m = JSON.parse(String(data)); } catch { return; }
+      if (m.type === 'auth') squat.auths++;
+      if (m.type !== 'hello') { squat.other.push(m.type); return; }
+      const round = ++squat.hellos;
+      ws.send(JSON.stringify(round === 1
+        ? { type: 'welcome', protocol: m.protocol, serverVersion: 'squatter', token: 'squatter' }
+        : { type: 'challenge', protocol: m.protocol, serverVersion: 'squatter',
+          nonceS: randomBytes(32).toString('hex'), proof: randomBytes(32).toString('hex') }));
+      ws.send(JSON.stringify({
+        type: 'convert', id: `squat-${round}`, url: `${origin}/squatter/${round}`,
+        options: { includeImages: true, includeFrontmatter: true, timeoutMs: 15000 },
+      }));
+    }));
+    await popup.click('#bridge-toggle');
+    await waitFor(() => squat.hellos >= 2, 15000);
+    await sleep(4000);
+    console.log(`squatter: hellos=${squat.hellos} auths=${squat.auths} other=${squat.other.join(',') || '-'}`);
+    check('squatter: the extension said hello to both rounds', squat.hellos >= 2);
+    check('squatter: no tab opened for its converts', browserHits('/squatter/') === 0,
+      `browser requests: ${browserHits('/squatter/')}`);
+    check('squatter: the extension sent no proof to a server that did not prove the key', squat.auths === 0);
+    const s1 = await bridgeStatus();
+    check('squatter: the popup says the program on the port is not Page2AI', s1.problem === 'untrusted',
+      `${s1.state}/${s1.problem}: ${s1.text}`);
+    for (const ws of squatter.clients) ws.terminate();
+    await new Promise((r) => squatter.close(r));
+    squatter = null;
+
+    // --- the real server without a key ----------------------------------------
+    startMcp('');
+    check('no key: server bridge listening', await waitFor(() => stderr.includes('bridge listening'), 15000));
+    await reconnect();
+    const noKey = await waitFor(async () => (await bridgeStatus()).problem === 'no-key', 15000);
+    const s2 = await bridgeStatus();
+    check('no key: the popup says the server has no key', noKey, `${s2.state}/${s2.problem}: ${s2.text}`);
+    check('no key: the popup says where the key goes', /settings/.test(await helpText()) &&
+      (await popup.$eval('.bridge-where', (n) => n.textContent ?? '').catch(() => '')).includes('PAGE2AI_BRIDGE_KEY'));
+    check('no key: the server log says what to paste where', /has no PAGE2AI_BRIDGE_KEY: copy the key from the Page2AI popup/.test(stderr));
+    await stopMcp();
   }
-  await popup.click('#bridge-toggle');
-  const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), MANUAL ? 120000 : 8000);
-  const afterClick = await popup.$eval('#bridge-status', (n) => `${n.dataset.state}: ${n.textContent}`).catch(() => '?');
-  console.log(`popup status after the switch: ${afterClick}`);
-  if (MANUAL) {
-    const dropped = await popup.evaluate(() => window.droppedToggles).catch(() => 0);
-    check('Allow alone turns the bridge on (background permissions.onAdded; popup message dropped)',
-      viaSwitch && dropped > 0, `dropped popup toggles: ${dropped}`);
-  } else if (EXPECT === 'bridge') {
-    check('popup switch connects the bridge (on a page it cannot extract)', viaSwitch);
+
+  // --- the real server with the key ------------------------------------------
+  let serverKey = key;
+  if (pairedRun) {
+    // The user's path: Show, then the value the popup prints.
+    await popup.click('#bridge-key-show');
+    await waitFor(async () => /^[A-Za-z0-9_-]{43}$/.test(
+      await popup.$eval('#bridge-key', (n) => (n.textContent ?? '').trim()).catch(() => '')), 5000);
+    const shown = await popup.$eval('#bridge-key', (n) => (n.textContent ?? '').trim()).catch(() => '');
+    check('the popup shows the same key on Show', shown === key && key !== '');
+    serverKey = shown;
   }
-  if (!viaSwitch) {
-    // The fallback arm runs a production build: the switch asks for site
-    // access and no one answers the prompt. Model a user who enabled the
-    // bridge and revoked the access later: send what the switch sends after
-    // a grant. (In the bridge arm this keeps the pipeline under test.)
-    await popup.evaluate(() => chrome.runtime.sendMessage({ type: 'PAGE2AI_BRIDGE_TOGGLE', enabled: true }));
+  stderr = '';
+  startMcp(serverKey);
+  check('server bridge listening', await waitFor(() => stderr.includes('bridge listening'), 15000));
+
+  if (pairedRun) {
+    await reconnect();
+  } else {
+    if (MANUAL) {
+      // The real toolbar popup can close when the prompt takes focus, and then only the
+      // background's permissions.onAdded can turn the bridge on. Model that: drop the
+      // message the popup sends after a grant.
+      const preGranted = await popup.evaluate(() =>
+        chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }));
+      if (preGranted) await setupFail('MANUAL_GRANT needs the production build (EXT_PATH=.output/chrome-mv3): this build already has site access, so no prompt appears');
+      await popup.evaluate(() => {
+        const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+        window.droppedToggles = 0;
+        chrome.runtime.sendMessage = (msg, ...rest) => {
+          if (msg?.type === 'PAGE2AI_BRIDGE_TOGGLE') { window.droppedToggles++; return Promise.resolve(); }
+          return send(msg, ...rest);
+        };
+      });
+      console.log(`browser pid: ${browser.process()?.pid ?? '?'}`);
+      console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
+    }
+    await popup.click('#bridge-toggle');
+    const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), MANUAL ? 120000 : 8000);
+    if (MANUAL) {
+      const dropped = await popup.evaluate(() => window.droppedToggles).catch(() => 0);
+      check('Allow alone turns the bridge on (background permissions.onAdded; popup message dropped)',
+        viaSwitch && dropped > 0, `dropped popup toggles: ${dropped}`);
+    }
+    if (!viaSwitch) {
+      // The fallback arm runs a production build: the switch asks for site
+      // access and no one answers the prompt. Model a user who enabled the
+      // bridge and revoked the access later: send what the switch sends after
+      // a grant.
+      await toggle(true);
+    }
   }
-  check('extension connected to the bridge',
+  check('extension paired with the server and connected',
     await waitFor(() => stderr.includes('bridge: extension connected'), 20000));
-  const popupStatus = await popup.$eval('#bridge-status', (n) => `${n.dataset.state}: ${n.textContent}`).catch(() => '?');
-  console.log(`popup status: ${popupStatus}`);
-  void sw;
+  const s3 = await bridgeStatus();
+  console.log(`popup status: ${s3.state}/${s3.problem || '-'}: ${s3.text}`);
+  if (EXPECT === 'bridge') check('the popup says connected', s3.state === 'connected' && !s3.problem);
 
   const init = await rpc(1, 'initialize', {
     protocolVersion: '2025-11-25',
@@ -259,8 +357,9 @@ try {
   const text = call?.result?.content?.[0]?.text ?? '';
   const isError = call?.result?.isError === true;
   console.log(`tool: isError=${isError} chars=${text.length} :: ${text.slice(0, 200).replace(/\n/g, ' | ')}`);
-  const viaBrowser = hits.filter((h) => h.browser).length;
-  const viaServer = hits.length - viaBrowser;
+  const pageHits = hits.filter((h) => h.path.startsWith('/agent/'));
+  const viaBrowser = pageHits.filter((h) => h.browser).length;
+  const viaServer = pageHits.length - viaBrowser;
   console.log(`fixture requests: browser=${viaBrowser} server=${viaServer}`);
 
   if (EXPECT === 'bridge') {
@@ -280,6 +379,7 @@ try {
   const bridgeLines = stderr.split('\n').filter((l) => /bridge/i.test(l)).slice(0, 12);
   if (bridgeLines.length) console.log(`server log:\n  ${bridgeLines.join('\n  ')}`);
   mcp?.kill();
+  squatter?.close();
   await browser.close().catch(() => {});
   server.close();
 }

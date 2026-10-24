@@ -71,9 +71,10 @@ jobs:
       # the point: the extractor runs inside an actual extension context, not a
       # DOM emulation that would not reproduce injection or the service worker.
       # @page2ai/mcp is the other end of the Agent Bridge suite: the published
-      # server, so the test speaks the wire protocol users get.
+      # server, so the test speaks the wire protocol users get (0.6: page2ai-bridge/2,
+      # the key; the suite also plays a program that took port 3025 without it).
       - name: Install puppeteer-core and @page2ai/mcp
-        run: npm i --no-save puppeteer-core @page2ai/mcp@0.5
+        run: npm i --no-save puppeteer-core @page2ai/mcp@0.6
 
       - name: Install Chrome
         uses: browser-actions/setup-chrome@v2

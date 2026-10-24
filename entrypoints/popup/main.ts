@@ -14,7 +14,12 @@ import {
   type ExtractRequestMessage,
   type Page2aiMessage,
 } from '~/lib/messages';
-import type { BridgeStatusQueryMessage, BridgeToggleMessage } from '~/lib/messages';
+import type {
+  BridgeKeyMessage,
+  BridgeProblem,
+  BridgeStatusQueryMessage,
+  BridgeToggleMessage,
+} from '~/lib/messages';
 import type { AutoProfile, ExtractResult } from '~/lib/types';
 
 type StatusTone = 'info' | 'busy' | 'ok' | 'warn' | 'error';
@@ -41,6 +46,12 @@ const el = {
   previewText: $<HTMLTextAreaElement>('#preview-text'),
   bridgeToggle: $<HTMLInputElement>('#bridge-toggle'),
   bridgeStatus: $<HTMLSpanElement>('#bridge-status'),
+  bridgePanel: $<HTMLElement>('#bridge-panel'),
+  bridgeHelp: $<HTMLParagraphElement>('#bridge-help'),
+  bridgeKey: $<HTMLElement>('#bridge-key'),
+  bridgeKeyShow: $<HTMLButtonElement>('#bridge-key-show'),
+  bridgeKeyCopy: $<HTMLButtonElement>('#bridge-key-copy'),
+  bridgeKeyNew: $<HTMLButtonElement>('#bridge-key-new'),
 };
 
 const MAX_LOG_ENTRIES = 300;
@@ -223,6 +234,7 @@ const initBridgeSwitch = async (): Promise<void> => {
       // Least privilege: the site access goes with the bridge.
       void browser.permissions.remove({ origins: BRIDGE_ORIGINS }).catch(() => undefined);
       updateBridgeStatusText('disconnected');
+      el.bridgePanel.hidden = true;
       return;
     }
     // Requested first and without an await before it: Firefox accepts
@@ -236,6 +248,7 @@ const initBridgeSwitch = async (): Promise<void> => {
         }
         toggle(true);
         updateBridgeStatusText('connecting');
+        el.bridgePanel.hidden = false;
       },
       () => {
         el.bridgeToggle.checked = false;
@@ -244,20 +257,63 @@ const initBridgeSwitch = async (): Promise<void> => {
     );
   });
 
+  initBridgeKey();
   const stored = await browser.storage.local.get('agentBridge');
   el.bridgeToggle.checked = stored.agentBridge === true;
   if (!el.bridgeToggle.checked) {
     updateBridgeStatusText('disconnected');
     return;
   }
+  el.bridgePanel.hidden = false;
   const hasAccess = await browser.permissions.contains({ origins: BRIDGE_ORIGINS }).catch(() => false);
   if (!hasAccess) {
     updateBridgeStatusText('needs-access');
     return;
   }
   const query: BridgeStatusQueryMessage = { type: 'PAGE2AI_BRIDGE_STATUS_QUERY' };
-  const reply = (await browser.runtime.sendMessage(query).catch(() => null)) as { state?: string } | null;
-  updateBridgeStatusText(reply?.state ?? 'connecting');
+  const reply = (await browser.runtime.sendMessage(query).catch(() => null)) as
+    { state?: string; problem?: BridgeProblem | null } | null;
+  updateBridgeStatusText(reply?.state ?? 'connecting', reply?.problem ?? null);
+};
+
+const KEY_MASK = '••••••••••••';
+
+const fetchBridgeKey = async (renew = false): Promise<string> => {
+  const msg: BridgeKeyMessage = { type: 'PAGE2AI_BRIDGE_KEY', renew };
+  const reply = (await browser.runtime.sendMessage(msg).catch(() => null)) as { key?: string } | null;
+  return reply?.key ?? '';
+};
+
+// The key is shown only on request and copied without its name: the value a
+// settings field or an "env" entry takes (the server also accepts NAME=value).
+const initBridgeKey = (): void => {
+  let visible = false;
+  let renewArmed: ReturnType<typeof setTimeout> | null = null;
+  el.bridgeKeyShow.addEventListener('click', async () => {
+    visible = !visible;
+    el.bridgeKey.textContent = visible ? await fetchBridgeKey() : KEY_MASK;
+    el.bridgeKeyShow.textContent = visible ? 'Hide' : 'Show';
+  });
+  el.bridgeKeyCopy.addEventListener('click', async () => {
+    const key = await fetchBridgeKey();
+    const copied = key ? await copyMarkdown(key) : false;
+    el.bridgeKeyCopy.textContent = copied ? 'Copied' : 'Copy failed: use Show';
+    setTimeout(() => { el.bridgeKeyCopy.textContent = 'Copy key'; }, 2000);
+  });
+  // Two clicks: a new key cuts off every MCP client that holds the old one.
+  el.bridgeKeyNew.addEventListener('click', async () => {
+    if (!renewArmed) {
+      el.bridgeKeyNew.textContent = 'Click again: the old key stops working';
+      renewArmed = setTimeout(() => { renewArmed = null; el.bridgeKeyNew.textContent = 'New key'; }, 5000);
+      return;
+    }
+    clearTimeout(renewArmed);
+    renewArmed = null;
+    el.bridgeKeyNew.textContent = 'New key';
+    const key = await fetchBridgeKey(true);
+    if (visible) el.bridgeKey.textContent = key;
+    el.bridgeHelp.textContent = 'New key made. Paste it into every MCP client that had the old one, then restart them.';
+  });
 };
 
 const init = async (): Promise<void> => {
@@ -306,21 +362,50 @@ const init = async (): Promise<void> => {
   el.extract.focus();
 };
 
-const updateBridgeStatusText = (state: string): void => {
-  const labels: Record<string, string> = {
-    disconnected: '',
-    connecting: 'connecting…',
-    connected: 'connected',
-    'needs-access': 'needs site access',
-  };
-  el.bridgeStatus.textContent = labels[state] ?? '';
+// A short label beside the switch, and below it what to do about it.
+const BRIDGE_PROBLEMS: Record<BridgeProblem, [string, string]> = {
+  'no-server': ['waiting for the MCP server',
+    'Start your MCP client with @page2ai/mcp 0.6 or later. It listens on port 3025.'],
+  'no-key': ['the server has no key',
+    'The MCP server is running without this browser’s key. Paste the key below into its settings, then restart the MCP client.'],
+  'unknown-key': ['the server has another key',
+    'The MCP server holds a different key (another browser’s, or an old one). Add this browser’s key; separate several with commas. Then restart the MCP client.'],
+  refused: ['key refused',
+    'The MCP server did not accept this browser’s key. Paste it into its settings again, then restart the MCP client.'],
+  untrusted: ['port 3025: not Page2AI',
+    'The program on port 3025 could not prove it knows this browser’s key, so Page2AI sends it nothing and opens no pages for it. Quit that program, or start your MCP client first.'],
+  'outdated-server': ['update the MCP server',
+    'The MCP server is older than this extension. Update it to @page2ai/mcp 0.6 or later, add the key below, and restart the MCP client.'],
+  'outdated-extension': ['update Page2AI',
+    'The MCP server is newer than this extension. Update Page2AI.'],
+  busy: ['another browser is connected',
+    'Another browser or profile is connected to this MCP server. This one connects when that one disconnects.'],
+};
+
+const BRIDGE_STATES: Record<string, [string, string]> = {
+  disconnected: ['', ''],
+  connecting: ['connecting…', ''],
+  connected: ['connected', 'Agents’ page_to_markdown calls open pages in this browser, in background tabs.'],
+  'needs-access': ['needs site access',
+    'Turn the switch on again and allow access to all sites: the bridge opens the pages agents ask for.'],
+};
+
+const updateBridgeStatusText = (state: string, problem: BridgeProblem | null = null): void => {
+  // Between two attempts the state reads disconnected: the problem still stands
+  // (switching off clears it).
+  const withProblem = state !== 'connected' && state !== 'needs-access' && problem != null;
+  const [label, help] = withProblem ? BRIDGE_PROBLEMS[problem] : BRIDGE_STATES[state] ?? ['', ''];
+  el.bridgeStatus.textContent = label;
   el.bridgeStatus.dataset.state = state;
+  if (withProblem) el.bridgeStatus.dataset.problem = problem;
+  else delete el.bridgeStatus.dataset.problem;
+  el.bridgeHelp.textContent = help;
 };
 
 const onBridgeStatus = (message: unknown): void => {
   const msg = message as Page2aiMessage;
   if (msg?.type === 'PAGE2AI_BRIDGE_STATUS') {
-    updateBridgeStatusText(msg.state);
+    updateBridgeStatusText(msg.state, msg.problem);
   }
 };
 

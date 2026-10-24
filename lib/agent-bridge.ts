@@ -3,19 +3,23 @@
 // routes page_to_markdown calls through this extension, giving agents access
 // to the user's real browser (cookies, JS rendering, extension-quality output).
 //
-// Protocol: page2ai-bridge/1 (spec: BRIDGE_PROTOCOL.md)
-// Security: loopback only, Origin auto-set by the browser, per-session token.
+// Protocol: page2ai-bridge/2 (@page2ai/mcp 0.6.0, src/bridge/protocol.ts there).
+// Security: loopback only, and a key this extension makes (makeBridgeKey) that the
+// user pastes into the server's PAGE2AI_BRIDGE_KEY. Any program can listen on the
+// port when the server is not running; the server has to prove it knows the key
+// before this client sends its own proof, and before any convert is obeyed.
 
 import {
   OPTIONS_GLOBAL_KEY,
-  type Page2aiMessage,
+  type BridgeProblem,
 } from './messages';
 import type { ExtractResult } from './types';
 
-const BRIDGE_PROTOCOL = 'page2ai-bridge/1';
+const BRIDGE_PROTOCOL = 'page2ai-bridge/2';
 const DEFAULT_PORT = 3025;
 const PING_INTERVAL_MS = 20_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const HANDSHAKE_MS = 10_000;
 
 const RESTRICTED_DOMAINS = new Set([
   'accounts.google.com',
@@ -31,6 +35,44 @@ const RESTRICTED_DOMAINS = new Set([
 // The bridge opens web pages only. An allowlist, not a list of bad schemes:
 // file:, data:, blob: and javascript: were all reachable through the old one.
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
+
+// ── key ─────────────────────────────────────────────────────────────────
+
+const toBase64Url = (bytes: Uint8Array): string =>
+  btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const fromBase64Url = (s: string): Uint8Array<ArrayBuffer> =>
+  Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)),
+    (c) => c.charCodeAt(0));
+
+const toHex = (bytes: ArrayBuffer | Uint8Array): string =>
+  Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
+
+const fromHex = (s: string): Uint8Array<ArrayBuffer> => Uint8Array.from(s.match(/../g) ?? [], (h) => parseInt(h, 16));
+
+const isHex64 = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+
+/** 32 random bytes, base64url: what the popup shows and PAGE2AI_BRIDGE_KEY holds. */
+export const makeBridgeKey = (): string => toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+
+export const isBridgeKey = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_-]{43}$/.test(s);
+
+interface HandshakeKey {
+  /** First 16 hex digits of SHA-256(key), as the server names it. */
+  id: string;
+  hmac: CryptoKey;
+}
+
+const loadKey = async (key: string): Promise<HandshakeKey> => {
+  const bytes = fromBase64Url(key);
+  const id = toHex(await crypto.subtle.digest('SHA-256', bytes)).slice(0, 16);
+  const hmac = await crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+  return { id, hmac };
+};
+
+const protocolNumber = (p: unknown): number => Number(/^page2ai-bridge\/(\d+)$/.exec(String(p))?.[1] ?? NaN);
+
+// ── client ──────────────────────────────────────────────────────────────
 
 interface ConvertRequest {
   type: 'convert';
@@ -51,26 +93,40 @@ interface PendingConvert {
 }
 
 type BridgeState = 'disconnected' | 'connecting' | 'connected';
-type StateCallback = (state: BridgeState) => void;
+type StateCallback = (state: BridgeState, problem: BridgeProblem | null) => void;
+
+// Where one connection is in the handshake. Only 'open' obeys a convert.
+type Stage = 'hello' | 'auth' | 'open' | 'closed';
 
 export class BridgeClient {
   private ws: WebSocket | null = null;
-  private token: string | null = null;
+  private stage: Stage = 'closed';
   private state: BridgeState = 'disconnected';
+  private problem: BridgeProblem | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
+  // Bumped by every connect() and disable(): a connect still loading the key
+  // stops if a newer one (a new key) or a disable came in meanwhile.
+  private connectGen = 0;
   private pending = new Map<number, PendingConvert>();
   private enabled = false;
   private port: number;
   private onStateChange: StateCallback | null = null;
+  private readonly getKey: () => Promise<string>;
 
-  constructor(port?: number) {
+  constructor(getKey: () => Promise<string>, port?: number) {
+    this.getKey = getKey;
     this.port = port ?? DEFAULT_PORT;
   }
 
   getState(): BridgeState {
     return this.state;
+  }
+
+  getProblem(): BridgeProblem | null {
+    return this.problem;
   }
 
   setStateCallback(cb: StateCallback | null): void {
@@ -81,13 +137,24 @@ export class BridgeClient {
     if (port != null) this.port = port;
     this.enabled = true;
     this.reconnectAttempt = 0;
-    this.connect();
+    void this.connect();
   }
 
   disable(): void {
     this.enabled = false;
+    this.connectGen++;
     this.clearReconnect();
     this.cleanup();
+    this.setProblem(null);
+  }
+
+  /** A new key: drop the connection made with the old one and pair again. */
+  restart(): void {
+    if (!this.enabled) return;
+    this.clearReconnect();
+    this.cleanup();
+    this.reconnectAttempt = 0;
+    void this.connect();
   }
 
   isConnected(): boolean {
@@ -121,52 +188,95 @@ export class BridgeClient {
 
   // ── connection lifecycle ──────────────────────────────────────────────
 
-  private connect(): void {
+  private async connect(): Promise<void> {
     if (!this.enabled || this.state !== 'disconnected') return;
+    const gen = ++this.connectGen;
     this.setState('connecting');
 
+    let key: HandshakeKey;
     try {
-      this.ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
+      key = await loadKey(await this.getKey());
     } catch {
+      if (gen !== this.connectGen) return;
       this.setState('disconnected');
       this.scheduleReconnect();
       return;
     }
+    if (gen !== this.connectGen || !this.enabled || this.ws) return;
 
-    this.ws.onopen = () => {
-      this.ws!.send(JSON.stringify({
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
+    } catch {
+      this.setProblem('no-server');
+      this.setState('disconnected');
+      this.scheduleReconnect();
+      return;
+    }
+    this.ws = ws;
+    this.stage = 'hello';
+    const nonceE = toHex(crypto.getRandomValues(new Uint8Array(32)));
+    let opened = false;
+    let heard = false;
+    // One message at a time: a convert sent right behind a challenge waits until
+    // the challenge is checked, and finds the connection closed if it failed.
+    let queue = Promise.resolve();
+
+    // A program that accepts the socket and never answers is not a Page2AI server.
+    this.handshakeTimer = setTimeout(() => {
+      if (this.ws === ws && this.stage !== 'open') this.distrust(ws);
+    }, HANDSHAKE_MS);
+
+    ws.onopen = () => {
+      opened = true;
+      ws.send(JSON.stringify({
         type: 'hello',
         protocol: BRIDGE_PROTOCOL,
         extensionId: browser.runtime.id,
         extensionVersion: browser.runtime.getManifest().version,
+        keyId: key.id,
+        nonceE,
       }));
     };
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      heard = true;
       let msg: Record<string, unknown>;
       try {
         msg = JSON.parse(event.data as string);
-      } catch { return; }
-      this.handleMessage(msg);
+      } catch {
+        this.distrust(ws);
+        return;
+      }
+      queue = queue.then(() => this.handleMessage(ws, msg, key, nonceE)).catch(() => this.distrust(ws));
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      // Closed before the server said a word: nothing listens, or an older server
+      // refused the upgrade (0.5.x does for a Firefox origin it does not list). A
+      // program that took the socket and stayed silent is not a Page2AI server.
+      if (!heard) this.setProblem(opened ? 'untrusted' : 'no-server');
       this.cleanup();
       if (this.enabled) this.scheduleReconnect();
     };
 
-    this.ws.onerror = () => {
+    ws.onerror = () => {
       // onclose fires after onerror — cleanup happens there
     };
   }
 
   private cleanup(): void {
     this.stopPing();
+    if (this.handshakeTimer != null) {
+      clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
-    this.token = null;
+    this.stage = 'closed';
 
     for (const [tabId, p] of this.pending) {
       clearTimeout(p.timer);
@@ -179,25 +289,77 @@ export class BridgeClient {
   private setState(s: BridgeState): void {
     if (this.state === s) return;
     this.state = s;
-    this.onStateChange?.(s);
+    this.onStateChange?.(s, this.problem);
+  }
+
+  private setProblem(p: BridgeProblem | null): void {
+    if (this.problem === p) return;
+    this.problem = p;
+    this.onStateChange?.(this.state, p);
+  }
+
+  /** The peer broke the protocol or failed the key check: it gets nothing more. */
+  private distrust(ws: WebSocket): void {
+    if (this.ws !== ws) return;
+    this.setProblem('untrusted');
+    this.stage = 'closed';
+    try { ws.close(); } catch { /* ignore */ }
   }
 
   // ── message handling ──────────────────────────────────────────────────
 
-  private handleMessage(msg: Record<string, unknown>): void {
+  private async handleMessage(ws: WebSocket, msg: Record<string, unknown>, key: HandshakeKey, nonceE: string): Promise<void> {
+    if (this.ws !== ws || this.stage === 'closed') return;
     const type = msg.type as string;
 
-    if (type === 'welcome') {
-      this.token = msg.token as string;
-      this.setState('connected');
-      this.reconnectAttempt = 0;
-      this.startPing();
+    if (this.stage === 'hello') {
+      if (type === 'error') {
+        this.setProblem(this.problemOf(msg, false));
+        this.stage = 'closed';
+        ws.close();
+        return;
+      }
+      if (type !== 'challenge' || msg.protocol !== BRIDGE_PROTOCOL || !isHex64(msg.nonceS) || !isHex64(msg.proof)) {
+        this.distrust(ws);
+        return;
+      }
+      const nonceS = msg.nonceS;
+      const proven = await crypto.subtle.verify('HMAC', key.hmac, fromHex(msg.proof),
+        new TextEncoder().encode(`${BRIDGE_PROTOCOL}|server|${this.port}|${nonceE}|${nonceS}`));
+      if (this.ws !== ws || this.stage !== 'hello') return;
+      if (!proven) {
+        this.distrust(ws);
+        return;
+      }
+      const proof = toHex(await crypto.subtle.sign('HMAC', key.hmac,
+        new TextEncoder().encode(`${BRIDGE_PROTOCOL}|client|${this.port}|${nonceS}|${nonceE}`)));
+      if (this.ws !== ws || this.stage !== 'hello') return;
+      this.stage = 'auth';
+      ws.send(JSON.stringify({ type: 'auth', proof }));
       return;
     }
 
-    if (type === 'error' && !this.token) {
-      // Auth rejection — close and retry later
-      this.ws?.close();
+    if (this.stage === 'auth') {
+      if (type === 'welcome' && msg.protocol === BRIDGE_PROTOCOL) {
+        this.stage = 'open';
+        if (this.handshakeTimer != null) {
+          clearTimeout(this.handshakeTimer);
+          this.handshakeTimer = null;
+        }
+        this.reconnectAttempt = 0;
+        this.setProblem(null);
+        this.setState('connected');
+        this.startPing();
+        return;
+      }
+      if (type === 'error') {
+        this.setProblem(this.problemOf(msg, true));
+        this.stage = 'closed';
+        ws.close();
+        return;
+      }
+      // A convert before the welcome, or anything else: not the protocol.
+      this.distrust(ws);
       return;
     }
 
@@ -208,6 +370,22 @@ export class BridgeClient {
 
     if (type === 'pong') {
       return;
+    }
+  }
+
+  /** A refusal before the handshake ended. `proven`: the server had already
+   *  proved it knows the key. */
+  private problemOf(msg: Record<string, unknown>, proven: boolean): BridgeProblem {
+    switch (msg.code) {
+      case 'NO_KEY': return 'no-key';
+      case 'UNKNOWN_KEY': return 'unknown-key';
+      case 'ALREADY_CONNECTED': return 'busy';
+      case 'PROTOCOL_MISMATCH':
+        return protocolNumber(msg.protocol) > protocolNumber(BRIDGE_PROTOCOL) ? 'outdated-extension' : 'outdated-server';
+      // Before a challenge only a page2ai-bridge/1 server (@page2ai/mcp 0.5.x) says
+      // AUTH_FAILED: it refuses every hello it does not speak.
+      case 'AUTH_FAILED': return proven ? 'refused' : 'outdated-server';
+      default: return 'refused';
     }
   }
 
@@ -321,12 +499,15 @@ export class BridgeClient {
 
   // ── WS send helpers ───────────────────────────────────────────────────
 
+  private canSend(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN && this.stage === 'open';
+  }
+
   private sendConvertResult(id: string, result: ExtractResult, url: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.token) return;
-    this.ws.send(JSON.stringify({
+    if (!this.canSend()) return;
+    this.ws!.send(JSON.stringify({
       type: 'result',
       id,
-      token: this.token,
       markdown: result.markdown,
       title: result.filename?.replace(/\.md$/, '') ?? '',
       url,
@@ -336,8 +517,8 @@ export class BridgeClient {
   }
 
   private sendError(id: string, code: string, message: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.token) return;
-    this.ws.send(JSON.stringify({ type: 'error', id, token: this.token, code, message }));
+    if (!this.canSend()) return;
+    this.ws!.send(JSON.stringify({ type: 'error', id, code, message }));
   }
 
   // ── keepalive ─────────────────────────────────────────────────────────
@@ -345,9 +526,7 @@ export class BridgeClient {
   private startPing(): void {
     this.stopPing();
     this.pingTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN && this.token) {
-        this.ws.send(JSON.stringify({ type: 'ping', token: this.token }));
-      }
+      if (this.canSend()) this.ws!.send(JSON.stringify({ type: 'ping' }));
     }, PING_INTERVAL_MS);
   }
 
@@ -361,12 +540,12 @@ export class BridgeClient {
   // ── reconnect ─────────────────────────────────────────────────────────
 
   private scheduleReconnect(): void {
-    if (!this.enabled) return;
+    if (!this.enabled || this.reconnectTimer != null) return;
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, MAX_RECONNECT_DELAY_MS);
     this.reconnectAttempt++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, delay);
   }
 
