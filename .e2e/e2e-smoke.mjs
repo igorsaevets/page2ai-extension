@@ -350,6 +350,35 @@ try {
     fb.status === 'fallback-after-crash' && fbMd.includes('AI: FALLBACK EXPORT START'), `status=${fb.status}`);
   check('include_frontmatter false: the fallback has no frontmatter either',
     !fbMd.startsWith('---') && !/^captured_at:/m.test(fbMd), JSON.stringify(fbMd.slice(0, 80)));
+
+  // T178: a run the Agent Bridge started names itself in its result (bridgeRun, staged with the
+  // options), a run the popup started does not; the bridge answers the agent with its own run only.
+  // A crashing run (the bad selector above) is the quickest one.
+  const runTags = await sw.evaluate(async (tabId) => {
+    const seen = [];
+    const on = (m, s) => {
+      if (m?.type === 'PAGE2AI_RESULT' && s.tab?.id === tabId) seen.push(m.bridgeRun ?? null);
+    };
+    chrome.runtime.onMessage.addListener(on);
+    const run = async (opts) => {
+      const before = seen.length;
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (k, o) => {
+          globalThis[k] = o;
+        },
+        args: ['__page2aiOptions', opts],
+      });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['/extractor.js'] });
+      for (let i = 0; i < 200 && seen.length === before; i++) await new Promise((r) => setTimeout(r, 100));
+    };
+    await run({ profile: 'auto', overrides: { skipSelectors: ['[[['] } });
+    await run({ profile: 'auto', overrides: { skipSelectors: ['[[['] }, bridgeRun: 'smoke-run-7' });
+    chrome.runtime.onMessage.removeListener(on);
+    return seen;
+  }, tabId);
+  check('a bridge run carries its id in the result, a popup run none',
+    JSON.stringify(runTags) === '[null,"smoke-run-7"]', JSON.stringify(runTags));
 } finally {
   await browser.close().catch(() => {});
   server.close();

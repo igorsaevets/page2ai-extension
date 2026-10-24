@@ -121,6 +121,15 @@ export default defineBackground(() => {
     const msg = message as Page2aiMessage;
 
     if (msg?.type === 'PAGE2AI_EXTRACT') {
+      // A tab the Agent Bridge opened is the agent's until the bridge closes it: a run
+      // started here would put the user's options and result in place of the agent's.
+      if (bridgeClient?.ownsTab(msg.tabId)) {
+        sendResponse({
+          ok: false,
+          error: 'this tab was opened for an AI agent by the Agent Bridge and closes by itself once the page is read',
+        } satisfies ExtractAck);
+        return undefined;
+      }
       startExtraction(msg)
         .then(() => sendResponse({ ok: true } satisfies ExtractAck))
         .catch((e) => sendResponse({ ok: false, error: errorText(e) } satisfies ExtractAck));
@@ -130,10 +139,11 @@ export default defineBackground(() => {
     if (msg?.type === 'PAGE2AI_RESULT' && sender.tab?.id != null) {
       const tabId = sender.tab.id;
 
-      // Bridge intercept: if this tab was created by a bridge convert request,
-      // route the result to the MCP server and close the tab. The sender's own
-      // URL and document, not the tab's: the tab may have moved on since.
-      if (bridgeClient?.onResult(tabId, msg.result, sender.url ?? sender.tab.url ?? '', sender.documentId)) {
+      // Bridge intercept: if this tab was created by a bridge convert request and the
+      // result is of the run the bridge started, route it to the MCP server and close
+      // the tab. The sender's own URL and document, not the tab's: the tab may have
+      // moved on since.
+      if (bridgeClient?.onResult(tabId, msg.result, sender.url ?? sender.tab.url ?? '', sender.documentId, msg.bridgeRun)) {
         return undefined;
       }
 

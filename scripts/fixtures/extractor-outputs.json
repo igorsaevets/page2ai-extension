@@ -1,0 +1,45 @@
+{
+  "_source": "Real extractor output, Chrome 155, extension main c579211 e2e build, Agent Bridge options (profile auto). Made by D:/AI_Scratch/page2ai/T178-work/blank_probe.mjs; host renamed, captured_at and client_render_wait_ms lines dropped.",
+  "cases": {
+    "emptyWithFrontmatter": {
+      "page": "empty-body fm=true img=true",
+      "blank": true,
+      "markdown": "---\ntitle: \"Empty\"\nsource: \"https://public.example/empty-body\"\nlanguage: \"unknown\"\ndescription: \"\"\ncanonical: \"https://public.example/empty-body\"\nclient_render_wait: \"timeout\"\nclient_render_chars: \"0 -> 0\"\n---\n\n# Empty\n\n<!-- AI: PAGE CONTENT START -->\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 0 -->\n<!-- body_inner_text_chars (baseline): 0 -->\n<!-- main_to_body_ratio: 1.000 -->\n<!-- ratio_status: OK -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "emptyNoFrontmatter": {
+      "page": "empty-body fm=false img=true",
+      "blank": true,
+      "markdown": "# Empty\n\n<!-- AI: PAGE CONTENT START -->\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 0 -->\n<!-- body_inner_text_chars (baseline): 0 -->\n<!-- main_to_body_ratio: 1.000 -->\n<!-- ratio_status: OK -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "appShell": {
+      "page": "script-only fm=false img=true",
+      "blank": true,
+      "markdown": "# App\n\n<!-- AI: PAGE CONTENT START -->\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 0 -->\n<!-- body_inner_text_chars (baseline): 35 -->\n<!-- main_to_body_ratio: 0.000 -->\n<!-- ratio_status: UNDER-EXTRACTED -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n<!-- WARNING: main render captured only 0.0% of baseline. -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "titleOnly": {
+      "page": "h1-equals-title fm=true img=true",
+      "blank": true,
+      "markdown": "---\ntitle: \"Hello\"\nsource: \"https://public.example/h1-equals-title\"\nlanguage: \"unknown\"\ndescription: \"\"\ncanonical: \"https://public.example/h1-equals-title\"\nclient_render_wait: \"ready\"\nclient_render_chars: \"5 -> 5\"\n---\n\n# Hello\n\n<!-- AI: PAGE CONTENT START -->\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 0 -->\n<!-- body_inner_text_chars (baseline): 5 -->\n<!-- main_to_body_ratio: 0.000 -->\n<!-- ratio_status: UNDER-EXTRACTED -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n<!-- WARNING: main render captured only 0.0% of baseline. -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "imageOnlyImagesOff": {
+      "page": "image-only fm=false img=false",
+      "blank": true,
+      "markdown": "# Pic\n\n<!-- AI: PAGE CONTENT START -->\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 0 -->\n<!-- body_inner_text_chars (baseline): 0 -->\n<!-- main_to_body_ratio: 1.000 -->\n<!-- ratio_status: OK -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "oneWord": {
+      "page": "one-word fm=false img=true",
+      "blank": false,
+      "markdown": "# Word\n\n<!-- AI: PAGE CONTENT START -->\n\n\nOK\n\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 4 -->\n<!-- body_inner_text_chars (baseline): 2 -->\n<!-- main_to_body_ratio: 2.000 -->\n<!-- ratio_status: OK -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "linkOnly": {
+      "page": "link-only fm=true img=true",
+      "blank": false,
+      "markdown": "---\ntitle: \"Link\"\nsource: \"https://public.example/link-only\"\nlanguage: \"unknown\"\ndescription: \"\"\ncanonical: \"https://public.example/link-only\"\nclient_render_wait: \"timeout\"\nclient_render_chars: \"9 -> 9\"\n---\n\n# Link\n\n<!-- AI: PAGE CONTENT START -->\n\n- [Next page](https://public.example/next)\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 42 -->\n<!-- body_inner_text_chars (baseline): 9 -->\n<!-- main_to_body_ratio: 4.667 -->\n<!-- ratio_status: OVER-EXTRACTED-NOISE -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 1 -->\n<!-- images: 0 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n<!-- WARNING: main render is 4.67x of body innerText. -->\n<!-- Consider: aggressiveCleanup=true, stripNoisyAttributesInLinkText=true, filterDecorativeImages=true. -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    },
+    "imageOnly": {
+      "page": "image-only fm=false img=true",
+      "blank": false,
+      "markdown": "# Pic\n\n<!-- AI: PAGE CONTENT START -->\n\n![A chart of sales](https://public.example/x.png)\n\n<!-- AI: PAGE CONTENT END -->\n\n<!-- AI: QUALITY METRICS -->\n<!-- main_render_chars: 49 -->\n<!-- body_inner_text_chars (baseline): 0 -->\n<!-- main_to_body_ratio: 1.000 -->\n<!-- ratio_status: OK -->\n<!-- profile: marketing -->\n<!-- headings: 0 -->\n<!-- links: 0 -->\n<!-- images: 1 -->\n<!-- forms: 0 -->\n<!-- iframes: 0 -->\n<!-- code_blocks: 0 -->\n<!-- captured_tabs: 0 -->\n<!-- footer_links: 0 -->\n\n<!-- AI: TECHNICAL COMPLETENESS METRICS -->\n<!-- dom_pre_elements: 0 -->\n<!-- code_group_tablists: 0 -->"
+    }
+  }
+}

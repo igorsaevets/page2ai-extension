@@ -12,6 +12,7 @@
 import {
   OPTIONS_GLOBAL_KEY,
   type BridgeProblem,
+  type StagedOptions,
 } from './messages';
 import type { ExtractResult } from './types';
 
@@ -108,6 +109,16 @@ const loadKey = async (key: string): Promise<HandshakeKey> => {
 
 const protocolNumber = (p: unknown): number => Number(/^page2ai-bridge\/(\d+)$/.exec(String(p))?.[1] ?? NaN);
 
+/** The page's own text in an extractor result: without the frontmatter, the HTML
+ *  comments the extractor adds (content markers, quality metrics) and the title
+ *  heading it writes from document.title. Empty on an empty page or an app shell
+ *  that had not rendered (measured on the extractor's output, T178). */
+const pageTextOf = (markdown: string): string => markdown
+  .replace(/^---\n[\s\S]*?\n---\n/, '')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/^[ \t]*# .*$/m, '')
+  .trim();
+
 // ── client ──────────────────────────────────────────────────────────────
 
 interface ConvertRequest {
@@ -125,6 +136,8 @@ interface PendingConvert {
   requestId: string;
   tabId: number;
   url: string;
+  // Staged with the options and echoed in the result: only this run answers the request.
+  run: string;
   timer: ReturnType<typeof setTimeout>;
   // The document the checks passed and the extractor went into (Chrome 106+).
   documentId?: string;
@@ -209,12 +222,18 @@ export class BridgeClient {
     return this.state === 'connected';
   }
 
+  /** A tab a convert request opened and has not closed yet: the agent's, not the user's. */
+  ownsTab(tabId: number): boolean {
+    return this.pending.has(tabId);
+  }
+
   /** Called by the background message handler when a PAGE2AI_RESULT arrives.
-   *  Returns true if the result belonged to a bridge-created tab (consumed).
-   *  `tabUrl` and `documentId` are the sending document's (MessageSender). */
-  onResult(tabId: number, result: ExtractResult, tabUrl: string, documentId?: string): boolean {
+   *  Returns true if the result is of the run a bridge convert started (consumed).
+   *  `tabUrl` and `documentId` are the sending document's (MessageSender);
+   *  `bridgeRun` is the run id the result carries (absent on a popup run). */
+  onResult(tabId: number, result: ExtractResult, tabUrl: string, documentId?: string, bridgeRun?: string): boolean {
     const pending = this.pending.get(tabId);
-    if (!pending) return false;
+    if (!pending || bridgeRun !== pending.run) return false;
 
     clearTimeout(pending.timer);
     this.pending.delete(tabId);
@@ -225,6 +244,13 @@ export class BridgeClient {
     } else if (this.isRestrictedUrl(tabUrl)) {
       this.sendError(pending.requestId, 'RESTRICTED_URL',
         `The page moved to ${this.safeHostname(tabUrl)}, which the Agent Bridge does not read`);
+    } else if (result.status === 'fallback-after-crash') {
+      // The plain-text fallback is not the page's Markdown: the server reads the page itself.
+      this.sendError(pending.requestId, 'EXTRACTION_FAILED',
+        `The extractor failed on this page${result.error ? ` (${result.error.name}: ${result.error.message})` : ''}`);
+    } else if (!pageTextOf(result.markdown ?? '')) {
+      this.sendError(pending.requestId, 'EXTRACTION_FAILED',
+        'The page in the browser had no text to extract: an empty page, or an app that had not rendered yet');
     } else {
       this.sendConvertResult(pending.requestId, result, tabUrl);
     }
@@ -497,7 +523,8 @@ export class BridgeClient {
       this.sendError(req.id, 'TIMEOUT', `Extraction timed out after ${timeoutMs}ms`);
     }, timeoutMs + 5_000);
 
-    this.pending.set(tabId, { requestId: req.id, tabId, url: req.url, timer });
+    const run = crypto.randomUUID();
+    this.pending.set(tabId, { requestId: req.id, tabId, url: req.url, run, timer });
 
     try {
       await this.waitForTabLoad(tabId, timeoutMs);
@@ -529,14 +556,16 @@ export class BridgeClient {
           (globalThis as Record<string, unknown>)[key] = opts;
           return location.href;
         },
-        // The agent's include_images / include_frontmatter (ignored before 1.6.0).
+        // The agent's include_images / include_frontmatter (ignored before 1.6.0), and the
+        // run id the result must carry to answer this request.
         args: [OPTIONS_GLOBAL_KEY, {
           profile: 'auto',
           overrides: {
             includeImages: req.options.includeImages !== false,
             includeFrontmatter: req.options.includeFrontmatter !== false,
           },
-        }],
+          bridgeRun: run,
+        } satisfies StagedOptions],
       });
       const pending = this.pending.get(tabId);
       if (!pending) return;
@@ -567,14 +596,16 @@ export class BridgeClient {
           }
         });
     } catch (e) {
+      // Nothing to say if the request was answered meanwhile (its result, a
+      // refusal, the timer): a second message for one id is not the protocol.
       const p = this.pending.get(tabId);
       if (p) {
         clearTimeout(p.timer);
         this.pending.delete(tabId);
         browser.tabs.remove(tabId).catch(() => undefined);
+        this.sendError(req.id, 'EXTRACTION_FAILED',
+          e instanceof Error ? e.message : String(e));
       }
-      this.sendError(req.id, 'EXTRACTION_FAILED',
-        e instanceof Error ? e.message : String(e));
     }
   }
 

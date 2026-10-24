@@ -7,6 +7,7 @@
 //
 //   node scripts/agent-bridge.test.mjs
 //   AB_MODULE=<path to another agent-bridge.ts> node scripts/agent-bridge.test.mjs   (run it on another build)
+import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -32,17 +33,19 @@ const TAB = 7;
 const calls = [];
 let landedUrl = '';      // what tabs.get reports once the tab is complete
 let staged = null;       // the InjectionResult of the options call: the document the call landed in
+// tabs.get; a case may swap it to hold the tab in its load
+let tabsGet = async (id) => ({ id, status: 'complete', url: landedUrl });
 globalThis.browser = {
   permissions: { contains: async () => true },
   tabs: {
     create: async ({ url }) => { calls.push({ op: 'create', url }); return { id: TAB }; },
-    get: async (id) => ({ id, status: 'complete', url: landedUrl }),
+    get: (id) => tabsGet(id),
     remove: async (id) => { calls.push({ op: 'remove', id }); },
     onUpdated: { addListener() {}, removeListener() {} },
   },
   scripting: {
     executeScript: async (d) => {
-      calls.push({ op: d.files ? 'files' : 'func', target: d.target });
+      calls.push({ op: d.files ? 'files' : 'func', target: d.target, args: d.args });
       return d.files ? [{ frameId: 0, documentId: staged?.documentId }] : [staged];
     },
   },
@@ -71,7 +74,9 @@ const convert = async (landed, doc) => {
   return id;
 };
 const filesCall = () => calls.find((c) => c.op === 'files');
-const RESULT = { markdown: '# Public page', filename: 'public-page.md', status: 'ok' };
+// The run id the options call staged (T178); undefined on a build that stages none.
+const stagedRun = () => calls.find((c) => c.op === 'func')?.args?.[1]?.bridgeRun;
+const RESULT = { markdown: '# Public page\n\nThe page text.', filename: 'public-page.md', status: 'ok' };
 
 // ── 1. literals the server refuses are refused here too ───────────────────
 const BLOCKED = [
@@ -111,7 +116,7 @@ check('the extractor is pinned to the checked document',
 check('... and nothing was refused', !sent.some((m) => m.type === 'error'), JSON.stringify(sent));
 
 // ── 4. a result from any other document is not returned ──────────────────
-client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-B');
+client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-B', stagedRun());
 check('a result sent by another document: refused, not returned',
   sent.some((m) => m.type === 'error' && m.id === id) && !sent.some((m) => m.type === 'result'),
   JSON.stringify(sent));
@@ -119,7 +124,7 @@ check('a result sent by another document: refused, not returned',
 // ── 5. the normal path still returns the page ─────────────────────────────
 id = await convert('https://public.example/start',
   { documentId: 'DOC-A', frameId: 0, result: 'https://public.example/start' });
-client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-A');
+client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-A', stagedRun());
 check('the checked document\'s result is returned',
   sent.some((m) => m.type === 'result' && m.id === id && m.markdown === RESULT.markdown), JSON.stringify(sent));
 
@@ -127,8 +132,72 @@ check('the checked document\'s result is returned',
 id = await convert('https://public.example/start', { frameId: 0, result: 'https://public.example/start' });
 check('no documentId: the tab target, as before', filesCall() && !('documentIds' in filesCall().target),
   JSON.stringify(filesCall()?.target));
-client.onResult(TAB, RESULT, 'https://public.example/start', undefined);
+client.onResult(TAB, RESULT, 'https://public.example/start', undefined, stagedRun());
 check('... and its result is returned', sent.some((m) => m.type === 'result' && m.id === id), JSON.stringify(sent));
+
+// ── 7. T178: a run the user starts from the popup in a bridge tab is the user's ──
+id = await convert('https://public.example/start',
+  { documentId: 'DOC-A', frameId: 0, result: 'https://public.example/start' });
+const run = stagedRun();
+check('the options call stages a run id for this request', typeof run === 'string' && run.length >= 16, String(run));
+check('the bridge owns its tab until the request is answered',
+  typeof client.ownsTab === 'function' && client.ownsTab(TAB) && !client.ownsTab(TAB + 1));
+const popupConsumed = client.onResult(TAB, { ...RESULT, markdown: '# Public page\n\nThe user\'s run.' },
+  'https://public.example/start', 'DOC-A', undefined);
+check('a result without the run id (a popup run) is not taken for the agent',
+  !popupConsumed && sent.length === 0 && !calls.some((c) => c.op === 'remove'), JSON.stringify(sent));
+check('... nor one with another run\'s id',
+  !client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-A', 'another-run') && sent.length === 0);
+client.onResult(TAB, RESULT, 'https://public.example/start', 'DOC-A', run);
+check('... and the bridge\'s own run still answers',
+  sent.some((m) => m.type === 'result' && m.id === id && m.markdown === RESULT.markdown), JSON.stringify(sent));
+check('... after which the tab is no longer the bridge\'s', typeof client.ownsTab === 'function' && !client.ownsTab(TAB));
+
+// ── 8. T178: a crashed or blank extraction is not the page ────────────────
+const answer = async (result) => {
+  const rid = await convert('https://public.example/start',
+    { documentId: 'DOC-A', frameId: 0, result: 'https://public.example/start' });
+  client.onResult(TAB, result, 'https://public.example/start', 'DOC-A', stagedRun());
+  return sent.find((m) => m.id === rid);
+};
+const crashed = await answer({
+  status: 'fallback-after-crash', filename: 'x-fallback.md',
+  markdown: '# Public page\n\n<!-- AI: FALLBACK EXPORT START -->\n\nPlain text of the page\n\n<!-- AI: FALLBACK EXPORT END -->',
+  error: { name: 'SyntaxError', message: "'[[[' is not a valid selector" },
+});
+check('the crash fallback: EXTRACTION_FAILED, so the server reads the page itself',
+  crashed?.type === 'error' && crashed.code === 'EXTRACTION_FAILED' && /SyntaxError/.test(crashed.message),
+  JSON.stringify(crashed));
+// Real extractor output (scripts/fixtures/extractor-outputs.json): blank ones fail, the rest is the page.
+const { cases } = JSON.parse(readFileSync(join(ROOT, 'scripts/fixtures/extractor-outputs.json'), 'utf8'));
+const wrong = [];
+for (const [name, c] of Object.entries(cases)) {
+  const got = await answer({ status: 'ok', filename: 'page.md', markdown: c.markdown });
+  const ok = c.blank
+    ? got?.type === 'error' && got.code === 'EXTRACTION_FAILED' && /no text/.test(got.message)
+    : got?.type === 'result' && got.markdown === c.markdown;
+  if (!ok) wrong.push(`${name} (${c.blank ? 'blank' : 'text'}): ${got?.type}/${got?.code ?? ''}`);
+}
+check(`blank extractions refused, pages with text returned (${Object.keys(cases).length} real outputs)`,
+  wrong.length === 0, wrong.join('; '));
+
+// ── 9. one message per request: an answer during the tab's load ends it ──
+let failLoad;
+tabsGet = () => new Promise((_, reject) => { failLoad = reject; });
+calls.length = 0;
+sent.length = 0;
+const loading = client.handleConvert({
+  type: 'convert', id: 'req-loading', url: 'https://public.example/start',
+  options: { includeImages: true, includeFrontmatter: true, timeoutMs: 15000 },
+});
+for (let i = 0; i < 200 && !failLoad; i++) await new Promise((r) => setTimeout(r, 5));
+client.onInjectError(TAB, 'The page changed before the extractor started: run the extraction again');
+failLoad(new Error(`No tab with id: ${TAB}`));
+await loading;
+tabsGet = async (tid) => ({ id: tid, status: 'complete', url: landedUrl });
+const forLoading = sent.filter((m) => m.id === 'req-loading');
+check('a request answered while its tab loads gets no second message',
+  forLoading.length === 1 && forLoading[0].code === 'EXTRACTION_FAILED', JSON.stringify(forLoading));
 
 // A result that never came would leave its timeout running.
 for (const p of client.pending.values()) clearTimeout(p.timer);

@@ -11,8 +11,8 @@ import {
   STEP_INJECT_ERROR,
   type ProgressMessage,
   type ResultMessage,
+  type StagedOptions,
 } from '~/lib/messages';
-import type { ExtractOptions } from '~/lib/types';
 
 export default defineUnlistedScript(async () => {
   const g = globalThis as Record<string, unknown>;
@@ -53,14 +53,15 @@ export default defineUnlistedScript(async () => {
   }
   g[RUNNING_GLOBAL_KEY] = true;
 
-  const options = (g[OPTIONS_GLOBAL_KEY] ?? {}) as ExtractOptions;
+  const { bridgeRun, ...options } = (g[OPTIONS_GLOBAL_KEY] ?? {}) as StagedOptions;
   delete g[OPTIONS_GLOBAL_KEY];
 
   try {
     const result = await runExtractor(options, (step, message, level) => {
       send({ type: 'PAGE2AI_PROGRESS', step, message, level: level ?? 'info' });
     });
-    send({ type: 'PAGE2AI_RESULT', result });
+    // The bridge takes only the result of the run it started (T178).
+    send({ type: 'PAGE2AI_RESULT', result, ...(bridgeRun ? { bridgeRun } : {}) });
   } finally {
     g[RUNNING_GLOBAL_KEY] = false;
   }

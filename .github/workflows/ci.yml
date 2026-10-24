@@ -88,6 +88,9 @@ jobs:
 
       - name: Build (e2e mode)
         run: npx wxt build --mode e2e
+      # The store build (.output/chrome-mv3): the Agent Bridge store-build suite below runs it (T178).
+      - name: Build (production, the store manifest)
+        run: npm run build
       - name: Build the agent script
         run: npm run build:agent
 
@@ -137,11 +140,19 @@ jobs:
         run: xvfb-run -a node .e2e/e2e-tab-panels.mjs
       # MCP stdio -> WebSocket -> the popup's switch -> a background tab -> the
       # extractor -> back. The e2e build has site access: a user who allowed it.
-      # Without it the extension refuses before opening a tab (the production
-      # build, EXPECT=fallback, run locally: no one answers the prompt in CI).
       - name: Agent Bridge suite (extension + @page2ai/mcp over stdio)
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-bridge.mjs
+      # The same suite on the store build, which has no site access of its own (E-493: in T166
+      # the e2e build's grant hid a bridge that worked on no page). No one answers the switch's
+      # prompt here, so the extension must refuse before opening a tab and the server answer by
+      # its own fetch. The granted path on this build: MANUAL_GRANT=1, run locally.
+      - name: Agent Bridge suite, store build (no site access granted)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          EXT_PATH: .output/chrome-mv3
+          EXPECT: fallback
         run: xvfb-run -a node .e2e/e2e-bridge.mjs
 
   cws-client:
