@@ -255,8 +255,10 @@ export class BridgeClient {
       if (this.ws !== ws) return;
       // Closed before the server said a word: nothing listens, or an older server
       // refused the upgrade (0.5.x does for a Firefox origin it does not list). A
-      // program that took the socket and stayed silent is not a Page2AI server.
-      if (!heard) this.setProblem(opened ? 'untrusted' : 'no-server');
+      // program that took the socket and stayed silent is not a Page2AI server; when
+      // the handshake timer cut it, distrust() has said so already (ef12464 then
+      // wrote no-server over it, the upgrade never having finished).
+      if (!heard && this.stage !== 'closed') this.setProblem(opened ? 'untrusted' : 'no-server');
       this.cleanup();
       if (this.enabled) this.scheduleReconnect();
     };
