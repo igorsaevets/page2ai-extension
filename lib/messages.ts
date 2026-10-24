@@ -25,6 +25,15 @@ export interface ProgressMessage {
 export interface ResultMessage {
   type: 'PAGE2AI_RESULT';
   result: ExtractResult;
+  /** The Agent Bridge run this result belongs to; absent on a run the popup started. */
+  bridgeRun?: string;
+}
+
+/** What a caller stages under OPTIONS_GLOBAL_KEY before injecting the extractor:
+ *  the options, plus the Agent Bridge's run id when the bridge started the run. One
+ *  object, so a later staging replaces the id along with the options. */
+export interface StagedOptions extends ExtractOptions {
+  bridgeRun?: string;
 }
 
 /** Site access the Agent Bridge needs: the manifest's optional_host_permissions,

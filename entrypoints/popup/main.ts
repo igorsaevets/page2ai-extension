@@ -178,7 +178,9 @@ const onMessage = (message: unknown, sender: { tab?: { id?: number } }): void =>
     }
     return;
   }
-  if (msg.type === 'PAGE2AI_RESULT') {
+  // A run the Agent Bridge started belongs to the agent: not shown here, and never
+  // put on the user's clipboard (onFreshResult copies).
+  if (msg.type === 'PAGE2AI_RESULT' && !msg.bridgeRun) {
     void onFreshResult(msg.result);
   }
 };

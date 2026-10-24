@@ -16,7 +16,10 @@
 // After the paired call (1.6.0): include_images / include_frontmatter false must reach the
 // extractor; a page that redirects to a private address must be refused by the extension
 // before anything runs there; a server started while the service worker sleeps must be
-// reached by the reconnect alarm alone, no tab moving meanwhile.
+// reached by the reconnect alarm alone, no tab moving meanwhile. T178: a page with no text
+// must come back as EXTRACTION_FAILED, and a popup run in a tab the bridge opened must be
+// refused while the agent still gets the bridge's own run. The fallback arm runs the store
+// build (CI since T178): its manifest and what the switch requests are checked too.
 //
 // Run:  npm i --no-save puppeteer-core @page2ai/mcp
 //       npx wxt build --mode e2e   (grants http(s)://*/*: a user who allowed the bridge)
@@ -105,6 +108,12 @@ if (!existsSync(MCP_ENTRY)) {
 const chromePath = CHROME_CANDIDATES.find((p) => existsSync(p));
 if (!chromePath) await setupFail('Chrome not found; set CHROME_PATH');
 
+// T178: a page with no text, and one whose image holds the load (the tab stays «loading»
+// while its document is already there, the window in which a user can open the popup).
+const BLANK_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Blank</title></head><body></body></html>';
+const SLOW_HTML = TEST_HTML.replace('/img/bridge-diagram.png', '/img/slow.png');
+const SLOW_IMAGE_MS = 4000;
+
 const hits = [];
 const server = createServer((req, res) => {
   hits.push({ browser: Boolean(req.headers['sec-fetch-mode']), path: req.url ?? '' });
@@ -113,8 +122,14 @@ const server = createServer((req, res) => {
     res.end();
     return;
   }
+  if (req.url === '/img/slow.png') {
+    setTimeout(() => { res.writeHead(404); res.end(); }, SLOW_IMAGE_MS);
+    return;
+  }
   res.setHeader('content-type', 'text/html; charset=utf-8');
-  res.end(req.url?.startsWith('/private/') ? PRIVATE_HTML : TEST_HTML);
+  if (req.url === '/agent/blank') res.end(BLANK_HTML);
+  else if (req.url === '/agent/slow') res.end(SLOW_HTML);
+  else res.end(req.url?.startsWith('/private/') ? PRIVATE_HTML : TEST_HTML);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 // A name only Chrome resolves (--host-resolver-rules below): @page2ai/mcp 0.5.4 refuses
@@ -250,6 +265,14 @@ try {
   const key = await popup.evaluate(() => chrome.runtime.sendMessage({ type: 'PAGE2AI_BRIDGE_KEY' }))
     .then((r) => r?.key ?? '').catch(() => '');
   check('the extension made a key in the format the server reads', /^[A-Za-z0-9_-]{43}$/.test(key));
+  // The fallback arm is the store build (in CI since T178): no site access of its own; the
+  // switch asks for it through optional_host_permissions (E-493: the e2e build hid that).
+  if (EXPECT === 'fallback') {
+    const m = await popup.evaluate(() => chrome.runtime.getManifest());
+    check('the build under test has the store manifest: no host_permissions, site access optional',
+      !m.host_permissions?.length && JSON.stringify(m.optional_host_permissions) === '["http://*/*","https://*/*"]',
+      JSON.stringify({ host_permissions: m.host_permissions, optional_host_permissions: m.optional_host_permissions }));
+  }
 
   const pairedRun = EXPECT === 'bridge' && !MANUAL;
   if (pairedRun) {
@@ -380,7 +403,20 @@ try {
       console.log(`browser pid: ${browser.process()?.pid ?? '?'}`);
       console.log('\n>>> In the Chrome window: answer the Page2AI site-access prompt with Allow (2 minutes) <<<\n');
     }
+    // What the switch asks Chrome for (the call still goes through, prompt and all).
+    await popup.evaluate(() => {
+      const request = chrome.permissions.request.bind(chrome.permissions);
+      window.requested = [];
+      chrome.permissions.request = (p, ...rest) => {
+        window.requested.push(p?.origins ?? null);
+        return request(p, ...rest);
+      };
+    });
     await popup.click('#bridge-toggle');
+    await waitFor(() => popup.evaluate(() => window.requested.length > 0), 3000);
+    check('the switch asks for site access on every http(s) site',
+      JSON.stringify(await popup.evaluate(() => window.requested)) === '[["http://*/*","https://*/*"]]',
+      JSON.stringify(await popup.evaluate(() => window.requested)));
     const viaSwitch = await waitFor(() => stderr.includes('bridge: extension connected'), MANUAL ? 120000 : 8000);
     if (MANUAL) {
       const dropped = await popup.evaluate(() => window.droppedToggles).catch(() => 0);
@@ -450,6 +486,43 @@ try {
       !redirText.includes(PRIVATE_MARKER) && `${stderr}${redirText}`.includes('RESTRICTED_URL') &&
       `${stderr}${redirText}`.includes('The page redirected to'),
       redirText.slice(0, 160).replace(/\n/g, ' | '));
+
+    // T178: a page with no text is not an answer. The extension says so and the server reads
+    // the page itself (a DNS failure here: only Chrome maps the name). c579211 sent the empty page.
+    const blank = await rpc(5, 'tools/call', {
+      name: 'page_to_markdown',
+      arguments: { url: `${origin}/agent/blank`, timeout_ms: 15000 },
+    }, 60000);
+    const blankText = (blank?.result?.content ?? []).map((c) => c.text ?? '').join('\n');
+    check('a page with no text: the extension answers EXTRACTION_FAILED, not an empty page',
+      browserHits('/agent/blank') > 0 && blankText.includes('EXTRACTION_FAILED') && blankText.includes('no text to extract'),
+      blankText.slice(0, 200).replace(/\n/g, ' | '));
+
+    // T178: the user extracts a tab the bridge opened, from the popup, while its image holds the
+    // load. The run is refused and the agent gets the bridge's own run, with its own options (no
+    // frontmatter, no image). c579211 ran the user's run and sent its result to the agent.
+    const slowCall = rpc(6, 'tools/call', {
+      name: 'page_to_markdown',
+      arguments: { url: `${origin}/agent/slow`, timeout_ms: 15000, include_images: false, include_frontmatter: false },
+    }, 60000);
+    let slowTab = null;
+    for (const end = Date.now() + 10000; slowTab == null && Date.now() < end;) {
+      slowTab = await popup.evaluate(async (u) => (await chrome.tabs.query({}))
+        .find((t) => (t.url || t.pendingUrl || '').startsWith(u))?.id ?? null, `${origin}/agent/slow`);
+      if (slowTab == null) await sleep(100);
+    }
+    // Past DOMContentLoaded, so a popup run would start at once; the image still holds the load.
+    await waitFor(() => browserHits('/img/slow.png') > 0, 5000);
+    await sleep(300);
+    const ack = slowTab == null ? null : await popup.evaluate((tabId) =>
+      chrome.runtime.sendMessage({ type: 'PAGE2AI_EXTRACT', tabId, options: { profile: 'auto' } }), slowTab);
+    const slow = await slowCall;
+    const slowText = slow?.result?.content?.[0]?.text ?? '';
+    check('the popup is refused in a tab the bridge opened',
+      ack?.ok === false && /Agent Bridge/.test(ack.error ?? ''), JSON.stringify(ack));
+    check('... and the agent gets the bridge\'s own run, with its options',
+      slowText.includes(MARKER) && !/^---\n/.test(slowText) && !slowText.includes('!['),
+      slowText.slice(0, 120).replace(/\n/g, ' | '));
 
     if (pairedRun) {
       // A server started while the service worker sleeps. bfba0b8 retried by setTimeout,
