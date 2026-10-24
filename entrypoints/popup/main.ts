@@ -401,7 +401,7 @@ const BRIDGE_PROBLEMS: Record<BridgeProblem, [string, string]> = {
   untrusted: ['port 3025: not Page2AI',
     'The program on port 3025 could not prove it knows this browser’s key, so Page2AI sends it nothing and opens no pages for it. Quit that program, or start your MCP client first.'],
   'outdated-server': ['update the MCP server',
-    'The MCP server is older than this extension. Update it to @page2ai/mcp 0.6 or later, add the key below, and restart the MCP client.'],
+    'The MCP server is older than this extension. Quit and reopen the MCP client: one that starts npx -y page2ai-mcp then runs the newest server; if its settings name a version, change it. A server older than 0.6 also needs the key below.'],
   'outdated-extension': ['update Page2AI',
     'The MCP server is newer than this extension. Update Page2AI.'],
   busy: ['another browser is connected',

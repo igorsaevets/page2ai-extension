@@ -43,8 +43,15 @@ jobs:
       - name: Agent Bridge page-check unit test
         run: node scripts/agent-bridge.test.mjs
 
+      # A connected bridge keeps the worker awake and Chrome installs an update only when it sleeps:
+      # lib/update-reload.ts reloads into the update once no bridge request is in flight (T180).
+      - name: Update reload unit test
+        run: node scripts/update-reload.test.mjs
+
       - name: Build (Chrome MV3)
         run: npm run build
+      - name: The built worker reloads into an update
+        run: node scripts/update-reload.test.mjs .output/chrome-mv3/background.js
       # The agent script (BL-45 C): fails on an extension API, eval, a Trusted Types sink, a console call
       # or a new network call in the bundle (scripts/build-agent.mjs).
       - name: Build the agent script

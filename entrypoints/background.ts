@@ -17,6 +17,7 @@ import {
   type ProgressMessage,
 } from '~/lib/messages';
 import { BridgeClient, RECONNECT_ALARM, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
+import { reloadWhenIdle } from '~/lib/update-reload';
 
 const errorText = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
@@ -100,6 +101,15 @@ export default defineBackground(() => {
     if (alarm.name === RECONNECT_ALARM) void bridgeReady.then(() => bridgeClient?.onAlarm(alarm.name));
   });
   browser.runtime.onStartup.addListener(() => undefined);
+
+  // A connected bridge keeps this worker awake, and Chrome installs an update only
+  // when it sleeps: reload into the update once no bridge request is in flight.
+  browser.runtime.onUpdateAvailable.addListener(() => {
+    reloadWhenIdle(async () => {
+      await bridgeReady;
+      return bridgeClient?.isBusy() ?? false;
+    }, () => browser.runtime.reload());
+  });
 
   // The grant itself turns the bridge on: the popup that asked may be gone by
   // the time the user answers the prompt, and its .then with it. A revoke
