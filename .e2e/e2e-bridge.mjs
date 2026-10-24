@@ -5,10 +5,13 @@
 // `sec-fetch-mode` on a navigation, the server's own fetch does not.
 //
 // page2ai-bridge/2 (@page2ai/mcp 0.6.0): the server holds the key the popup shows.
-// Before the real server, the bridge arm runs two others on port 3025:
+// Before the real server, the bridge arm runs three others on port 3025:
 //   squatter  a program that took the port without the key; it answers the hello
-//             with a welcome (round 1) or a challenge with a made-up proof (round 2),
-//             each followed by a convert. No tab may open, no proof may leave.
+//             with a welcome and a convert (round 1), a challenge with a made-up proof
+//             and a convert in one TCP write (round 2), or the convert before that
+//             challenge (round 3). No tab may open; nothing but hellos may reach it.
+//   silent    a program that takes the socket and never answers: the popup must
+//             name it as not Page2AI once the extension cuts it.
 //   no key    the real server without PAGE2AI_BRIDGE_KEY: the popup must say so.
 //
 // Run:  npm i --no-save puppeteer-core @page2ai/mcp
@@ -238,39 +241,64 @@ try {
   const pairedRun = EXPECT === 'bridge' && !MANUAL;
   if (pairedRun) {
     // --- squatter: a program on the port without the key ---------------------
+    // Every tab Chrome opens meanwhile counts, not only those that reach the fixture.
+    const tabsOpened = [];
+    const onTarget = (t) => { if (t.type() === 'page') tabsOpened.push(t.url()); };
+    browser.on('targetcreated', onTarget);
     const { WebSocketServer } = createRequire(MCP_ENTRY)('ws');
     const squat = { hellos: 0, auths: 0, other: [] };
     squatter = new WebSocketServer({ host: '127.0.0.1', port: bridgePort });
     await new Promise((resolve, reject) => { squatter.once('listening', resolve); squatter.once('error', reject); });
+    const convertFor = (round) => ({
+      type: 'convert', id: `squat-${round}`, url: `${origin}/squatter/${round}`,
+      options: { includeImages: true, includeFrontmatter: true, timeoutMs: 15000 },
+    });
+    const madeUpChallenge = (m) => ({ type: 'challenge', protocol: m.protocol, serverVersion: 'squatter',
+      nonceS: randomBytes(32).toString('hex'), proof: randomBytes(32).toString('hex') });
     squatter.on('connection', (ws) => ws.on('message', (data) => {
       let m;
       try { m = JSON.parse(String(data)); } catch { return; }
       if (m.type === 'auth') squat.auths++;
       if (m.type !== 'hello') { squat.other.push(m.type); return; }
       const round = ++squat.hellos;
-      ws.send(JSON.stringify(round === 1
-        ? { type: 'welcome', protocol: m.protocol, serverVersion: 'squatter', token: 'squatter' }
-        : { type: 'challenge', protocol: m.protocol, serverVersion: 'squatter',
-          nonceS: randomBytes(32).toString('hex'), proof: randomBytes(32).toString('hex') }));
-      ws.send(JSON.stringify({
-        type: 'convert', id: `squat-${round}`, url: `${origin}/squatter/${round}`,
-        options: { includeImages: true, includeFrontmatter: true, timeoutMs: 15000 },
-      }));
+      const frames = round === 1
+        ? [{ type: 'welcome', protocol: m.protocol, serverVersion: 'squatter', token: 'squatter' }, convertFor(1)]
+        : round === 2 ? [madeUpChallenge(m), convertFor(2)] : [convertFor(round), madeUpChallenge(m)];
+      // One TCP write: the convert is already there while the extension checks the proof.
+      ws._socket.cork();
+      for (const f of frames) ws.send(JSON.stringify(f));
+      process.nextTick(() => ws._socket.uncork());
     }));
     await popup.click('#bridge-toggle');
-    await waitFor(() => squat.hellos >= 2, 15000);
+    await waitFor(() => squat.hellos >= 3, 20000);
     await sleep(4000);
-    console.log(`squatter: hellos=${squat.hellos} auths=${squat.auths} other=${squat.other.join(',') || '-'}`);
-    check('squatter: the extension said hello to both rounds', squat.hellos >= 2);
-    check('squatter: no tab opened for its converts', browserHits('/squatter/') === 0,
-      `browser requests: ${browserHits('/squatter/')}`);
+    browser.off('targetcreated', onTarget);
+    console.log(`squatter: hellos=${squat.hellos} auths=${squat.auths} other=${squat.other.join(',') || '-'} tabs=${tabsOpened.length}`);
+    check('squatter: the extension said hello to all three rounds', squat.hellos >= 3);
+    check('squatter: no tab opened for its converts', tabsOpened.length === 0 && browserHits('/squatter/') === 0,
+      `tabs: ${tabsOpened.join(' ') || 'none'}; browser requests: ${browserHits('/squatter/')}`);
     check('squatter: the extension sent no proof to a server that did not prove the key', squat.auths === 0);
+    check('squatter: the extension sent it nothing but hellos', squat.other.length === 0, squat.other.join(','));
     const s1 = await bridgeStatus();
     check('squatter: the popup says the program on the port is not Page2AI', s1.problem === 'untrusted',
       `${s1.state}/${s1.problem}: ${s1.text}`);
     for (const ws of squatter.clients) ws.terminate();
     await new Promise((r) => squatter.close(r));
     squatter = null;
+
+    // --- silent: a program that takes the socket and never answers ------------
+    const silentSockets = new Set();
+    const silent = createNetServer((s) => { silentSockets.add(s); s.on('error', () => {}); });
+    await new Promise((resolve, reject) => { silent.once('error', reject); silent.listen(bridgePort, '127.0.0.1', resolve); });
+    await reconnect();
+    // The extension cuts it after 10 s. ef12464 then wrote «waiting for the MCP server»
+    // over its own verdict, the upgrade never having finished.
+    await sleep(11500);
+    const sSilent = await bridgeStatus();
+    check('silent program: the popup says the program on the port is not Page2AI', sSilent.problem === 'untrusted',
+      `${sSilent.state}/${sSilent.problem}: ${sSilent.text}`);
+    for (const s of silentSockets) s.destroy();
+    await new Promise((r) => silent.close(r));
 
     // --- the real server without a key ----------------------------------------
     startMcp('');
@@ -295,6 +323,24 @@ try {
     const shown = await popup.$eval('#bridge-key', (n) => (n.textContent ?? '').trim()).catch(() => '');
     check('the popup shows the same key on Show', shown === key && key !== '');
     serverKey = shown;
+    // Copy key when the clipboard API refuses (the popup lost focus): ef12464's fallback
+    // copied the preview's Markdown and said «Copied». The key itself is never printed.
+    await popup.evaluate(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new Error('Document is not focused.'));
+      const exec = document.execCommand.bind(document);
+      document.execCommand = (cmd, ...rest) => {
+        if (cmd !== 'copy') return exec(cmd, ...rest);
+        const field = [...document.querySelectorAll('textarea, input')]
+          .find((f) => typeof f.selectionStart === 'number' && f.selectionEnd > f.selectionStart);
+        window.copiedText = field ? field.value.slice(field.selectionStart, field.selectionEnd) : String(document.getSelection());
+        return true;
+      };
+    });
+    await popup.click('#bridge-key-copy');
+    await waitFor(async () => (await popup.evaluate(() => window.copiedText ?? null)) !== null, 5000);
+    const copiedText = await popup.evaluate(() => window.copiedText ?? null);
+    check('Copy key copies the key when the clipboard API refuses', copiedText === key,
+      `copied ${copiedText === null ? 'nothing' : `${String(copiedText).length} characters, ${copiedText === key ? 'the key' : 'not the key'}`}`);
   }
   stderr = '';
   startMcp(serverKey);

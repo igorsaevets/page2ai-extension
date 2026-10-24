@@ -278,6 +278,30 @@ const initBridgeSwitch = async (): Promise<void> => {
 
 const KEY_MASK = '••••••••••••';
 
+// copyMarkdown's fallback selects the preview, which holds the page's Markdown: for the
+// key, ef12464 copied that and said «Copied». This one copies the text it is given.
+const copyText = async (text: string): Promise<boolean> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.readOnly = true;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    try {
+      return document.execCommand('copy');
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+    }
+  }
+};
+
 const fetchBridgeKey = async (renew = false): Promise<string> => {
   const msg: BridgeKeyMessage = { type: 'PAGE2AI_BRIDGE_KEY', renew };
   const reply = (await browser.runtime.sendMessage(msg).catch(() => null)) as { key?: string } | null;
@@ -296,7 +320,7 @@ const initBridgeKey = (): void => {
   });
   el.bridgeKeyCopy.addEventListener('click', async () => {
     const key = await fetchBridgeKey();
-    const copied = key ? await copyMarkdown(key) : false;
+    const copied = key ? await copyText(key) : false;
     el.bridgeKeyCopy.textContent = copied ? 'Copied' : 'Copy failed: use Show';
     setTimeout(() => { el.bridgeKeyCopy.textContent = 'Copy key'; }, 2000);
   });
@@ -365,11 +389,11 @@ const init = async (): Promise<void> => {
 // A short label beside the switch, and below it what to do about it.
 const BRIDGE_PROBLEMS: Record<BridgeProblem, [string, string]> = {
   'no-server': ['waiting for the MCP server',
-    'Start your MCP client with @page2ai/mcp 0.6 or later. It listens on port 3025.'],
+    'Start your MCP client with @page2ai/mcp 0.6 or later; it listens on port 3025. Already running? Update it: an older server refuses this browser.'],
   'no-key': ['the server has no key',
-    'The MCP server is running without this browser’s key. Paste the key below into its settings, then restart the MCP client.'],
+    'The MCP server is running without this browser’s key. Paste the key below into its settings, then restart the MCP client. Several MCP clients? The one started first holds the port: give the key to each.'],
   'unknown-key': ['the server has another key',
-    'The MCP server holds a different key (another browser’s, or an old one). Add this browser’s key; separate several with commas. Then restart the MCP client.'],
+    'The MCP server holds a different key (an old one, or another browser’s). Replace an old key with this one; for several browsers, separate their keys with commas. Then restart the MCP client.'],
   refused: ['key refused',
     'The MCP server did not accept this browser’s key. Paste it into its settings again, then restart the MCP client.'],
   untrusted: ['port 3025: not Page2AI',
