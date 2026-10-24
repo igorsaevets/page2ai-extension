@@ -558,15 +558,18 @@ export const runExtractor = async (
     if (config.enableFailSafeDownload) {
       fallbackMd = normalizeMarkdownPreserveCode(
         [
-          '---',
-          `title: "${cleanInline(document.title).replace(/"/g, '\\"')}"`,
-          `source: "${location.href}"`,
-          `captured_at: "${new Date().toISOString()}"`,
-          `status: "fallback_export_after_crash"`,
-          `error_name: "${cleanInline(err?.name || 'UnknownError').replace(/"/g, '\\"')}"`,
-          `error_message: "${cleanInline(err?.message || String(error)).replace(/"/g, '\\"')}"`,
-          '---',
-          '',
+          // include_frontmatter: false holds here too (an agent asked for none).
+          ...(config.includeFrontmatter ? [
+            '---',
+            `title: "${cleanInline(document.title).replace(/"/g, '\\"')}"`,
+            `source: "${location.href}"`,
+            `captured_at: "${new Date().toISOString()}"`,
+            `status: "fallback_export_after_crash"`,
+            `error_name: "${cleanInline(err?.name || 'UnknownError').replace(/"/g, '\\"')}"`,
+            `error_message: "${cleanInline(err?.message || String(error)).replace(/"/g, '\\"')}"`,
+            '---',
+            '',
+          ] : []),
           `# ${cleanInline(document.title) || 'Untitled page'}`,
           '',
           '<!-- AI: FALLBACK EXPORT START -->',

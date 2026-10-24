@@ -285,6 +285,71 @@ try {
   console.log(md.split('\n').slice(0, 60).join('\n'));
   console.log('--- end ---\n');
   console.log(`markdown length: ${md.length} chars; filename: ${result.filename}`);
+
+  // T176: the Agent Bridge checks the document its options call ran in (an injection reports it, Chrome 106+)
+  // and the extractor runs only in a document where the options were staged. A documentIds pin alone is not
+  // enough: with the back/forward cache on, Chrome 155 ran a pin on the previous document in the new one.
+  const ran = await sw.evaluate(async (tabId) => {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: () => location.href });
+    return { documentId: r?.documentId ?? null, href: r?.result ?? null };
+  }, tabId);
+  check('an injection reports the document it ran in',
+    typeof ran.documentId === 'string' && ran.documentId.length > 0 && ran.href === pageUrl, JSON.stringify(ran));
+  await page.goto(`${pageUrl}?moved`, { waitUntil: 'load' });
+  const stale = await sw.evaluate(async ({ tabId, documentId }) => {
+    try {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId, documentIds: [documentId] }, func: () => location.href });
+      return `ran in ${r?.result}`;
+    } catch (e) {
+      return `refused: ${e && e.message ? e.message : e}`;
+    }
+  }, { tabId, documentId: ran.documentId });
+  console.log(`(platform) a documentIds pin on the previous document: ${stale}`);
+
+  const key = `result:${tabId}`;
+  await sw.evaluate(async (key) => {
+    await chrome.storage.session.remove(key);
+    globalThis.__e2eUnstaged = null;
+    chrome.runtime.onMessage.addListener((m) => {
+      if (m?.type === 'PAGE2AI_PROGRESS' && m.step === 'inject-error') globalThis.__e2eUnstaged = m.message;
+    });
+  }, key);
+  await sw.evaluate(async (tabId) => {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['/extractor.js'] });
+  }, tabId);
+  let unstaged = null;
+  for (const end = Date.now() + 20000; !unstaged && Date.now() < end;) {
+    unstaged = await sw.evaluate(async (key) => globalThis.__e2eUnstaged ??
+      ((await chrome.storage.session.get(key))[key] ? 'RESULT' : null), key);
+    if (!unstaged) await new Promise((r) => setTimeout(r, 300));
+  }
+  check('the extractor does not run in a document where no options were staged',
+    typeof unstaged === 'string' && unstaged !== 'RESULT' && /page changed/.test(unstaged), String(unstaged));
+
+  // include_frontmatter false holds when the extractor crashes and falls back to the page text too
+  // (a selector the DOM rejects makes it throw, as a broken page or a bad option would).
+  await sw.evaluate(async (key) => chrome.storage.session.remove(key), key);
+  await sw.evaluate(async (tabId) => {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (k, o) => {
+        globalThis[k] = o;
+      },
+      args: ['__page2aiOptions', { profile: 'auto', overrides: { includeFrontmatter: false, skipSelectors: ['[[['] } }],
+    });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['/extractor.js'] });
+  }, tabId);
+  let fallback = null;
+  for (const end = Date.now() + 60000; !fallback && Date.now() < end;) {
+    fallback = await sw.evaluate(async (key) => (await chrome.storage.session.get(key))[key] ?? null, key);
+    if (!fallback) await new Promise((r) => setTimeout(r, 500));
+  }
+  const fb = fallback?.result ?? {};
+  const fbMd = fb.markdown || '';
+  check('a crash falls back to the page text',
+    fb.status === 'fallback-after-crash' && fbMd.includes('AI: FALLBACK EXPORT START'), `status=${fb.status}`);
+  check('include_frontmatter false: the fallback has no frontmatter either',
+    !fbMd.startsWith('---') && !/^captured_at:/m.test(fbMd), JSON.stringify(fbMd.slice(0, 80)));
 } finally {
   await browser.close().catch(() => {});
   server.close();

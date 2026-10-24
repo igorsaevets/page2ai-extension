@@ -131,8 +131,9 @@ export default defineBackground(() => {
       const tabId = sender.tab.id;
 
       // Bridge intercept: if this tab was created by a bridge convert request,
-      // route the result to the MCP server and close the tab.
-      if (bridgeClient?.onResult(tabId, msg.result, sender.tab.url ?? '')) {
+      // route the result to the MCP server and close the tab. The sender's own
+      // URL and document, not the tab's: the tab may have moved on since.
+      if (bridgeClient?.onResult(tabId, msg.result, sender.url ?? sender.tab.url ?? '', sender.documentId)) {
         return undefined;
       }
 
