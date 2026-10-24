@@ -290,3 +290,58 @@ select:focus-visible {
 .bridge-status[data-state='connecting'] {
   color: var(--warn);
 }
+
+.bridge-status[data-problem] {
+  color: var(--warn);
+}
+
+.bridge-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.bridge-panel[hidden] {
+  display: none;
+}
+
+.bridge-help:empty {
+  display: none;
+}
+
+.bridge-help,
+.bridge-where {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.bridge-key-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bridge-key-name {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.bridge-key {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.bridge-key-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn.small {
+  padding: 3px 8px;
+  font-size: 11px;
+}

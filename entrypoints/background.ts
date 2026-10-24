@@ -8,6 +8,7 @@ import {
   OPTIONS_GLOBAL_KEY,
   STEP_INJECT_ERROR,
   resultCacheKey,
+  type BridgeKeyMessage,
   type BridgeStatusMessage,
   type CachedResult,
   type ExtractAck,
@@ -15,25 +16,41 @@ import {
   type Page2aiMessage,
   type ProgressMessage,
 } from '~/lib/messages';
-import { BridgeClient } from '~/lib/agent-bridge';
+import { BridgeClient, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
 
 const errorText = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
 
 const BRIDGE_STORAGE_KEY = 'agentBridge';
 const BRIDGE_PORT_KEY = 'agentBridgePort';
+const BRIDGE_KEY_KEY = 'agentBridgeKey';
 
 let bridgeClient: BridgeClient | null = null;
+
+// The key the user pastes into the MCP server's PAGE2AI_BRIDGE_KEY: made on first use,
+// kept in storage.local (this profile only, never synced), replaced on «New key».
+// Chained, so the popup and the bridge asking at once cannot make two keys.
+let keyChain: Promise<string> = Promise.resolve('');
+const getBridgeKey = (renew = false): Promise<string> => {
+  keyChain = keyChain.catch(() => '').then(async () => {
+    const stored = await browser.storage.local.get(BRIDGE_KEY_KEY);
+    if (!renew && isBridgeKey(stored[BRIDGE_KEY_KEY])) return stored[BRIDGE_KEY_KEY] as string;
+    const key = makeBridgeKey();
+    await browser.storage.local.set({ [BRIDGE_KEY_KEY]: key });
+    return key;
+  });
+  return keyChain;
+};
 
 const initBridge = async (): Promise<void> => {
   const stored = await browser.storage.local.get([BRIDGE_STORAGE_KEY, BRIDGE_PORT_KEY]);
   const enabled = stored[BRIDGE_STORAGE_KEY] === true;
   const port = typeof stored[BRIDGE_PORT_KEY] === 'number' ? stored[BRIDGE_PORT_KEY] : undefined;
 
-  bridgeClient = new BridgeClient(port);
+  bridgeClient = new BridgeClient(() => getBridgeKey(), port);
 
-  bridgeClient.setStateCallback((state) => {
-    const status: BridgeStatusMessage = { type: 'PAGE2AI_BRIDGE_STATUS', state };
+  bridgeClient.setStateCallback((state, problem) => {
+    const status: BridgeStatusMessage = { type: 'PAGE2AI_BRIDGE_STATUS', state, problem };
     void browser.runtime.sendMessage(status).catch(() => undefined);
   });
 
@@ -141,8 +158,23 @@ export default defineBackground(() => {
     }
 
     if (msg?.type === 'PAGE2AI_BRIDGE_STATUS_QUERY') {
-      void bridgeReady.then(() => sendResponse({ state: bridgeClient?.getState() ?? 'disconnected' }));
+      void bridgeReady.then(() => sendResponse({
+        state: bridgeClient?.getState() ?? 'disconnected',
+        problem: bridgeClient?.getProblem() ?? null,
+      }));
       return true; // answered after initBridge settles
+    }
+
+    if (msg?.type === 'PAGE2AI_BRIDGE_KEY') {
+      const { renew } = msg as BridgeKeyMessage;
+      void getBridgeKey(renew === true).then(async (key) => {
+        sendResponse({ key });
+        if (renew) {
+          await bridgeReady;
+          bridgeClient?.restart();
+        }
+      });
+      return true;
     }
 
     return undefined;

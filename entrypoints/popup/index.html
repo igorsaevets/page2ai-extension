@@ -57,6 +57,21 @@
         </label>
         <span id="bridge-status" class="bridge-status"></span>
       </footer>
+      <section id="bridge-panel" class="bridge-panel" hidden>
+        <p id="bridge-help" class="bridge-help"></p>
+        <div class="bridge-key-row">
+          <span class="bridge-key-name">PAGE2AI_BRIDGE_KEY</span>
+          <code id="bridge-key" class="bridge-key">••••••••••••</code>
+        </div>
+        <div class="bridge-key-actions">
+          <button id="bridge-key-show" class="btn small" type="button">Show</button>
+          <button id="bridge-key-copy" class="btn small" type="button">Copy key</button>
+          <button id="bridge-key-new" class="btn small" type="button">New key</button>
+        </div>
+        <p class="bridge-where">The MCP server must hold this key: in Claude Desktop, Page2AI’s setting
+          «Agent Bridge key»; in other clients, the environment variable PAGE2AI_BRIDGE_KEY. Restart the
+          client after pasting it. Whoever holds the key can open pages in this browser: keep it private.</p>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>
