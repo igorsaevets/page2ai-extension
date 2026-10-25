@@ -164,12 +164,12 @@ Not shipped in v1.0. Only needed for CWS "featured" placement, which we do not n
 
 ### Single Purpose statement
 ```
-Page2AI converts the content of a web page into a clean Markdown document: the page in the active browser tab when the user invokes it (the Markdown is placed on the user's clipboard), or, only when the user turns on the opt-in Agent Bridge switch, a page the user's own local Page2AI MCP server asks it to open in a background tab (the Markdown goes to that local process).
+Page2AI converts a web page into a clean Markdown document. The page is the one in the active browser tab when the user invokes the extension — or, only when the user has turned on the opt-in Agent Bridge switch, a page the user's own local Page2AI MCP server supplies, opened in a background tab. One conversion, two ways to name the page; the Markdown goes to the user's clipboard or to that local process.
 ```
 
 ### Data collection disclosures
 
-For each item in the CWS privacy form, tick **NO / not collected**:
+For each item in the CWS privacy form, tick **NO / not collected** — except Website content, which is **YES** since 1.6.0 (see its rationale):
 
 - Personally identifiable information: NO
 - Health information: NO
@@ -179,10 +179,10 @@ For each item in the CWS privacy form, tick **NO / not collected**:
 - Location: NO
 - Web history: NO
 - User activity: NO
-- Website content: NO
+- Website content: YES (the page text the user asked to convert; loopback-only transfer, below)
 - Other: NO
 
-_Rationale: Page2AI reads webpage content during an extraction the user triggered, converts it, writes it to the clipboard, and drops it. With the Agent Bridge switch on (1.6.0, opt-in), it instead sends the Markdown to the Page2AI MCP server process on the user's own machine over a loopback connection (`ws://127.0.0.1:3025`) the user paired with a key — a transfer to the user's own process on the same device, for the item's single purpose, disclosed in PRIVACY.md ("The Agent Bridge"). Nothing is stored beyond the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes), the user's profile preference, and the bridge switch and pairing key (`chrome.storage.local`, on-device only). No "collection" in the sense the CWS form defines: nothing reaches the publisher or any third party, and nothing leaves the user's device except into the user's own local process._
+_Website content rationale (paste with the YES above): Page2AI reads the page the user asked to convert and turns it into Markdown. By default the Markdown goes to the user's clipboard and nowhere else. With the opt-in Agent Bridge switch on (1.6.0, off by default), the Markdown is instead sent over a loopback connection (`ws://127.0.0.1:3025`) to the Page2AI MCP server process on the user's own machine, which the user paired with a key; that process passes it to the AI agent the user is talking to. The publisher receives nothing, operates no server for the extension, and has no access to page content at any point. Storage is on-device only: the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes), the profile preference, and the bridge switch and pairing key (`chrome.storage.local`). The whole flow is disclosed in PRIVACY.md ("The Agent Bridge"). Every other item stays NO: Page2AI collects nothing else, and what it reads is used for this single purpose only — never sold, never for advertising, creditworthiness or any unrelated purpose. (Changed at the T188 panel: three reviewer models and the User Data FAQ's local-processing disclosure both say a page-reading extension declares Website content even when processing stays on the device; versions up to 1.5.1 shipped with NO, 1.6.0 declares YES rather than argue the definition.)_
 
 ### Certifications (all THREE must be checked)
 
