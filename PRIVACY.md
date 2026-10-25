@@ -1,11 +1,11 @@
 # Privacy Policy: Page2AI
 
 **Effective date:** 2026-07-20
-**Last updated:** 2026-10-17
+**Last updated:** 2026-10-25 (version 1.6.0: the optional Agent Bridge)
 
 ## Summary
 
-Page2AI does not collect, transmit, sell, or share any personal data. It converts the page in your browser. There is no server component, no analytics, no telemetry, no crash reporting, no third-party SDK. Up to version 1.4.0 it also asked the site you were reading for a Markdown copy of the page; version 1.5.0, released 2026-10-17, makes no network request. See [Network requests](#network-requests).
+Page2AI does not collect, sell, or share any personal data. It converts the page in your browser. There is no server operated by the publisher, no analytics, no telemetry, no crash reporting, no third-party SDK. Up to version 1.4.0 it also asked the site you were reading for a Markdown copy of the page; version 1.5.0, released 2026-10-17, makes no network request of its own. Version 1.6.0 adds one opt-in exception you control: the Agent Bridge, off by default, connects to a Page2AI MCP server process running on your own machine and, only while you leave it on, sends that process the Markdown of pages it asks for. Nothing is ever sent to the publisher. See [Network requests](#network-requests) and [The Agent Bridge (1.6.0, opt-in)](#the-agent-bridge-160-opt-in).
 
 If you don't want to trust the summary, the rest of this document walks through what Page2AI does with what you touch, permission by permission, feature by feature.
 
@@ -35,9 +35,25 @@ Page2AI converts this content into Markdown text on your machine and:
 
 No content is transmitted to any server operated by Page2AI, the publisher, or any third party.
 
+## The Agent Bridge (1.6.0, opt-in)
+
+The popup has an **Agent Bridge** switch, off by default. It exists so that an AI agent running on your own machine (through the Page2AI MCP server, `@page2ai/mcp` 0.6.0 or later) can ask your browser for a page it cannot read itself: a page behind your sign-in, or one that only JavaScript in a real browser can render.
+
+While the switch is on:
+
+- Page2AI keeps a WebSocket connection to `ws://127.0.0.1:3025` — an address on your own machine, reachable only from your own machine. An alarm retries the connection every 30 seconds while the switch is on, so a server you start later is found without reopening the browser.
+- The server can ask Page2AI to open a web address in a background tab. Page2AI opens it in your browser, with your cookies and the page's own scripts, exactly as your browser shows it, runs the same extractor the popup runs, and sends the resulting Markdown back over that local connection to the server process. That process belongs to the MCP client you configured (for example Claude Desktop, Claude Code or Cursor); what it does with the Markdown — normally, passing it to the AI model you are talking to — is governed by that client's and that model's terms, not by this policy.
+- The extension applies the output choices the agent asked for (`include_images`, `include_frontmatter`); it does not substitute the popup's own settings.
+- Page2AI refuses some addresses before opening them: anything that is not `http:` or `https:`, the sign-in pages of Google, Microsoft, Apple and AWS, and addresses written as loopback, private, link-local or other non-public IP literals (or a `localhost` name). After a tab loads, the page it actually landed on is checked again with the same rules before the extractor runs, and the result is checked once more when it arrives. A public page can still redirect your browser to an address on your own network before that second check runs; in that case the browser has loaded the page, but its content is not extracted and is not returned to the server.
+- A result with no page text of its own, or one produced after the extractor crashed, is answered with an error, not sent as if it were the page.
+- Background tabs opened for the agent stay the agent's: extracting one from the popup is refused, and a bridge result is never shown in the popup or copied to your clipboard.
+- The connection is paired with a key. The first time you turn the switch on, Page2AI makes a random key, shows it in the popup (*Show*, *Copy key*, *New key*) and stores it on this device only. You paste it into the MCP server's `PAGE2AI_BRIDGE_KEY` setting. On every connection both sides prove they know the key before any page is opened; the key itself never crosses the connection. A program that is not your server gets nothing. *New key* replaces the key; servers holding the old one stop connecting.
+
+Turning the switch off disconnects at once and gives back the site access described under [Permissions](#permissions-walkthrough). Page2AI sends nothing to the publisher, ever: the bridge's only peer is a process on your own machine, at an address only your own machine can reach.
+
 ## Network requests
 
-**Since version 1.5.0, released 2026-10-17, Page2AI makes no network request.** It reads only the page in your tab, and no longer asks
+**Since version 1.5.0, released 2026-10-17, Page2AI makes no network request of its own, and 1.6.0 keeps that rule with one opt-in exception.** It reads only the page in your tab, and no longer asks
 the site for an `llms.txt` index or a Markdown copy of the page, because such a copy can be older than the page or
 differ from it. It copies parts of the page into a separate document in which the browser loads nothing. The agent
 script built from the same code makes none either. Its build fails if the bundle uses a browser network API or
@@ -64,6 +80,8 @@ the extension:
 
 None of these requests went to the author of Page2AI or to an analytics or other service.
 
+The one exception is the Agent Bridge in 1.6.0, and only while you leave its switch on. Page2AI then holds a WebSocket connection to `ws://127.0.0.1:3025` on your own machine and retries it every 30 seconds by alarm. The background tabs it opens for the local server load their pages from those pages' own servers, with your cookies, as any tab you open yourself does. Page2AI fetches nothing else, from anywhere, in any version since 1.5.0.
+
 To capture content the page shows only on demand, the extension scrolls the page and opens its tabs and collapsed
 sections, as you would. The page may then load more of its own content, from wherever it loads it, exactly as when
 you scroll or click it yourself. Those requests come from the page, not from Page2AI.
@@ -75,7 +93,9 @@ Page2AI uses the browser's `chrome.storage.local` API to remember your extension
 - Which profile you last selected (`auto`, `docs`, `marketing`, etc.).
 - Small UI preferences (for example, whether the log panel is expanded).
 
-Page2AI also uses `chrome.storage.session` (cleared automatically when Chrome is closed) to cache the most recent extraction result for the current tab. If you close the popup while extraction is running, reopening it restores the result instead of forcing you to re-run.
+Page2AI also uses `chrome.storage.session` (cleared automatically when Chrome is closed) to cache the most recent extraction result for the current tab. If you close the popup while extraction is running, reopening it restores the result instead of forcing you to re-run. Results produced for the Agent Bridge are not cached there; they go straight to the local server.
+
+Since 1.6.0, `chrome.storage.local` also holds the Agent Bridge switch (on or off) and its pairing key: a random value Page2AI makes on this device, shown in the popup so you can paste it into your MCP server. It is stored only in this browser profile, is never synced, and a new key replaces it from the popup at any time.
 
 Neither of these storage areas ever leaves your browser. They are readable only by the Page2AI extension itself, on your device, and they are wiped when you uninstall the extension.
 
@@ -87,7 +107,7 @@ Neither of these storage areas ever leaves your browser. They are readable only 
 - **No advertising.** No ads. No ad targeting. No sale of data (because there is no data to sell).
 - **No cross-site tracking.** Page2AI cannot correlate visits across sites, because it doesn't run on any page you didn't explicitly act on.
 - **No remote code.** All JavaScript that runs in your browser ships inside the extension bundle you installed from the Chrome Web Store. Page2AI does not fetch or `eval` remote code.
-- **No cloud service.** There is no Page2AI server. The domain in the extension listing points to the source code repository on GitHub, not to a service.
+- **No publisher server.** There is no server run by the publisher for the extension to talk to. The domain in the extension listing points to the source code repository on GitHub, not to a service. The Agent Bridge (1.6.0, opt-in) talks only to a process on your own machine.
 
 ## Permissions: walkthrough
 
@@ -127,6 +147,22 @@ Page2AI requests only these Chrome extension permissions:
 
 **Why Page2AI needs it:** To remember your profile preference between sessions (`storage.local`) and to cache the current tab's extraction result while Chrome is open (`storage.session`). Page2AI does not use `storage.sync`.
 
+### `alarms` (since 1.6.0)
+
+**What Chrome grants:** A timer that can wake the extension's service worker even after the browser has put it to sleep. Chrome shows no install warning for this permission.
+
+**Why Page2AI needs it:** While the Agent Bridge switch is on, retrying the connection to the local MCP server every 30 seconds. A plain timer dies with the sleeping service worker, so a server started after the browser would never be reached. The alarm is created only while the switch is on and cleared when you turn it off.
+
+**What Page2AI does NOT do with it:** Anything else. It carries no data and contacts nobody; it only wakes the extension to retry a connection to your own machine.
+
+### Optional site access (since 1.6.0, only on your action)
+
+**What Chrome grants:** Access to pages on `http://*/*` and `https://*/*` — but only after you grant it, and only for as long as it stays granted. The extension ships with **no** `host_permissions` of its own: at install, and after every update, it cannot read any site until you act.
+
+**Why Page2AI needs it:** Only for the Agent Bridge. `activeTab` covers the one tab you invoked Page2AI on; it cannot cover a background tab the bridge opens for your local server. Turning the Agent Bridge switch on asks Chrome for this access; turning the switch off gives it back (`permissions.remove`). Because the access is optional rather than required, an update that adds it does not disable the extension for existing users.
+
+**What Page2AI does with it:** Injects the extractor into background tabs the bridge opens, and nowhere else. Your own popup extractions keep working through `activeTab` whether or not you ever grant this.
+
 ## Third parties
 
 Page2AI does not use any third-party service, SDK, or dependency at runtime. The extension is compiled from open-source code and bundles everything it needs.
@@ -154,4 +190,4 @@ If this policy changes materially (for example, if a future version of Page2AI i
 
 ## Google Limited Use compliance statement
 
-Page2AI's use and transfer of information received from Google APIs (via Chrome Web Store publishing) will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. Because Page2AI collects no user data, it does not use or transfer any user data to any purpose covered by that policy.
+Page2AI's use and transfer of information received from Google APIs (via Chrome Web Store publishing) will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. Page2AI collects no user data. The only transfer it can make is the one you switch on yourself: with the Agent Bridge on, the Markdown of a page your own local MCP server asked for is sent to that process on your own machine, for the single purpose of giving it to the agent you are talking to. It is never sent to the publisher or to any third party, and never used for any other purpose.

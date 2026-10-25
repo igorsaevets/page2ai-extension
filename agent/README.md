@@ -17,8 +17,9 @@ fetch-based tool cannot reach, and only the Markdown lands on disk, never the ra
 | `page2ai-agent.js` | a classic script that defines `window.__page2aiAgent = { version, extract(options) }`, frozen, non-enumerable, non-configurable | Playwright MCP `--init-script` |
 | `page2ai-agent.SHA256SUMS` | checksums of both | `sha256sum -c page2ai-agent.SHA256SUMS` |
 
-The build fails if the bundle contains an extension API, `eval`, a Trusted Types sink, a console call, or a network
-call other than the two `fetch` calls of the official-Markdown lookup. The code is not minified, so it can be read
+The build fails if the bundle contains an extension API, `eval`, a Trusted Types sink, a console call, or any network
+call at all: since 1.5.0 the extractor takes the content only from the page and there is no official-Markdown lookup
+to exempt. The code is not minified, so it can be read
 before it is run.
 
 ## Use
