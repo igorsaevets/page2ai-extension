@@ -1,6 +1,6 @@
 # CHROMEWEBSTORE.md: Page2AI on the Chrome Web Store
 
-> Last Updated: 2026-10-18. The store record for item `dlpaaijcnbbmlfeohlphjpnbbcnomnno`: what the
+> Last Updated: 2026-10-25 (1.6.0 listing texts prepared; not yet submitted — the stores serve 1.5.1). The store record for item `dlpaaijcnbbmlfeohlphjpnbbcnomnno`: what the
 > Developer Dashboard holds, field by field, and why each permission is requested.
 > Title and Summary were read from the public listing on 2026-10-17 (version 1.4.0, updated October 16,
 > 2026); the Detailed description is the dashboard field as saved on 2026-10-18 (T140). Until 2026-10-17 this file was `assets/store/listing.md`, the v1.0
@@ -37,11 +37,11 @@ _Best fit. Official examples include "document editors" and "tools to help users
 English (Worldwide)
 ```
 
-### Detailed description (dashboard field since 2026-10-18)
+### Detailed description (1.6.0 text, prepared 2026-10-25; the dashboard still holds the 1.5.0 text below it in git history — paste this with the 1.6.0 package)
 ````
 Page2AI turns any webpage into a clean, AI-ready Markdown document with one click — ready to paste into your LLM, coding agent, or RAG pipeline.
 
-Everything runs inside your browser. No servers, no accounts, no telemetry, no cloud.
+Everything runs inside your browser. No publisher servers, no accounts, no telemetry, no cloud. The one opt-in exception is the Agent Bridge below: it talks only to a process on your own machine.
 
 WHAT MAKES IT DIFFERENT
 
@@ -52,7 +52,8 @@ WHAT MAKES IT DIFFERENT
 • Quality gate — post-extraction check on <pre> count vs a plain-text baseline; automatic fallback if under-extraction is detected.
 • Structured-data appendix — JSON-LD, OpenGraph, Microdata, Next.js __NEXT_DATA__ hoisted into a machine-readable appendix at the end.
 • Cached-result recovery — close the popup mid-run, reopen it, your result is waiting (badge shows ✓).
-• Dark mode, live progress log, PII masking (opt-in).
+• Dark mode, live progress log, and masking inside the framework-state appendix (opt-in): email addresses, phone numbers, tokens and API keys found in a page's embedded app state are replaced with placeholders before that appendix is written. The page's visible text is not rewritten.
+• Agent Bridge (opt-in, off by default) — let an AI agent on your own machine read pages through your browser: pages behind your sign-in, or pages only JavaScript can render. Details under FOR AI AGENTS.
 
 HANDLES JAVASCRIPT-HEAVY SITES
 
@@ -67,16 +68,17 @@ FOR WHOM
 
 PRIVACY
 
-Page2AI does not send data anywhere. No analytics, no telemetry, no crash reports, no cloud service, no accounts, no remote code. The extension only reads the page you explicitly click on (via activeTab), converts it to Markdown on your device, and copies it to your clipboard. Everything else is preferences stored locally in chrome.storage.
+Page2AI does not send data to the publisher or to any third party. No analytics, no telemetry, no crash reports, no accounts, no remote code. By itself the extension only reads the page you explicitly click on (via activeTab), converts it to Markdown on your device, and copies it to your clipboard. The Agent Bridge is the one opt-in exception: turn its switch on and Page2AI connects to a Page2AI MCP server process on your own machine (an address only your own machine can reach) and sends it the Markdown of pages it opens in background tabs, so your AI agent can read pages behind your sign-in. Turn the switch off and that stops, and the site access it needed is given back. Preferences, the current tab's result, the bridge switch and its pairing key stay in chrome.storage on your device. Full text: PRIVACY.md in the source repository.
 
 MINIMUM PERMISSIONS
 
 • activeTab — read only the page you clicked on.
 • scripting — inject the reader script into that page.
 • clipboardWrite — copy the result to your clipboard.
-• storage — remember your profile preference between sessions.
+• storage — remember your profile preference between sessions, keep the current tab's result until you close the browser, and hold the Agent Bridge switch and its key.
+• alarms — only while the Agent Bridge switch is on: retry its connection to your own machine every 30 seconds. Chrome shows no install warning for it.
 
-No <all_urls>. No host_permissions. No tabs API. Chrome will not warn you that this extension can read all your data on all sites — because it cannot.
+No <all_urls> at install. No host_permissions in the package: Page2AI cannot read any site until you act. Site access for http and https pages is asked for only when you turn the Agent Bridge on, and removed when you turn it off. Without it, an update never disables the extension.
 
 ALSO AVAILABLE ON FIREFOX
 
@@ -84,7 +86,7 @@ addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/
 
 FOR AI AGENTS (MCP)
 
-Optional MCP server lets AI agents call Page2AI directly through the Model Context Protocol. Install with: npm i @page2ai/mcp — source at github.com/igorsaevets/page2ai-mcp.
+Optional MCP server lets AI agents call Page2AI directly through the Model Context Protocol: npx -y page2ai-mcp — source at github.com/igorsaevets/page2ai-mcp. With this extension's Agent Bridge switch on and its pairing key pasted into the server, the agent can also read pages through your browser (signed-in and JavaScript-rendered pages); without it, the server fetches public pages itself.
 
 OPEN SOURCE
 
@@ -98,10 +100,7 @@ BUILT BY
 
 Igor Saevets, AI Expert and Entrepreneur.
 ````
-_3125 characters (limit 16,000). Plain text: the store does not render Markdown. Saved in the dashboard,
-submitted for review on 2026-10-18 at 01:46 UTC (T140) and public since the review passed the same day
-(section 7). The rest is the wording of the 2026-09-07 resubmission, after the keyword-spam rejection in
-section 8._
+_4,816 characters (limit 16,000), counted 2026-10-25. Plain text: the store does not render Markdown. This is the 1.6.0 text, prepared ahead of the package and not yet in the dashboard; the dashboard still holds the 1.5.0 text (3,125 characters) saved and submitted for review on 2026-10-18 at 01:46 UTC (T140), public since the review passed the same day (section 7). The rest is the wording of the 2026-09-07 resubmission, after the keyword-spam rejection in section 8._
 
 ---
 
@@ -118,6 +117,12 @@ session (section 2): the old ones showed the label v1.3.0, and 2 and 3 the popup
 The PRIVACY paragraph of the description is true of 1.5.0. It was not complete for 1.4.0, which asked the site
 for `llms.txt` and a Markdown copy of the page (PRIVACY.md, Network requests), so do not quote it as a
 description of 1.4.0 (T136 panel, grokbuild).
+
+### Detailed description: the change for 1.6.0 (prepared 2026-10-25, to apply with the 1.6.0 package)
+
+1.6.0 adds the Agent Bridge (opt-in): background tabs, optional site access and the `alarms` permission. The 1.5.0 PRIVACY paragraph ("only reads the page you explicitly click on", four permissions, "No host_permissions … because it cannot") would be false for the 1.6.0 package, so the description at the top of this section is rewritten for 1.6.0: a bridge bullet, a rewritten PRIVACY paragraph, five install-time permissions plus the optional grant, and `npx -y page2ai-mcp` in FOR AI AGENTS (was `npm i @page2ai/mcp`). PRIVACY.md carries the matching full text ("The Agent Bridge (1.6.0, opt-in)").
+
+**Reviewer note for 1.6.0 (paste into the review notes field):** New in 1.6.0: the opt-in Agent Bridge. Off by default. When the user turns its switch on, the extension connects to a Page2AI MCP server process on the user's own machine (ws://127.0.0.1:3025, loopback only), paired by a random key both sides prove they know before any page opens (the key never crosses the connection). It then opens pages the local server names in background tabs and returns their Markdown over that local connection. That is why it requests optional site access (http/https) at switch-on and removes it at switch-off; the package itself declares no host_permissions, so an update does not disable the extension. The `alarms` permission only retries that local connection every 30 seconds while the switch is on. Non-web schemes, sign-in providers' pages and non-public IP literals are refused before opening and again on the landed page. To test: install the MCP server (`npx -y page2ai-mcp`), turn Agent Bridge on, paste the popup's key into the server's PAGE2AI_BRIDGE_KEY, restart the MCP client, and ask the agent for a signed-in page; PRIVACY.md, "The Agent Bridge", describes the whole flow.
 
 ## 2. Graphic assets
 
@@ -159,7 +164,7 @@ Not shipped in v1.0. Only needed for CWS "featured" placement, which we do not n
 
 ### Single Purpose statement
 ```
-Page2AI extracts the content of the active browser tab and converts it into a clean Markdown document, then places that Markdown on the user's clipboard.
+Page2AI converts the content of a web page into a clean Markdown document: the page in the active browser tab when the user invokes it (the Markdown is placed on the user's clipboard), or, only when the user turns on the opt-in Agent Bridge switch, a page the user's own local Page2AI MCP server asks it to open in a background tab (the Markdown goes to that local process).
 ```
 
 ### Data collection disclosures
@@ -177,7 +182,7 @@ For each item in the CWS privacy form, tick **NO / not collected**:
 - Website content: NO
 - Other: NO
 
-_Rationale: Page2AI reads webpage content only in-memory during a single extraction the user actively triggered, converts it, writes it to the clipboard, and drops it. Nothing is stored beyond the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes) and the user's own profile preference (`chrome.storage.local`, on-device only). No "collection" in the sense the CWS form defines. Nothing leaves the device._
+_Rationale: Page2AI reads webpage content during an extraction the user triggered, converts it, writes it to the clipboard, and drops it. With the Agent Bridge switch on (1.6.0, opt-in), it instead sends the Markdown to the Page2AI MCP server process on the user's own machine over a loopback connection (`ws://127.0.0.1:3025`) the user paired with a key — a transfer to the user's own process on the same device, for the item's single purpose, disclosed in PRIVACY.md ("The Agent Bridge"). Nothing is stored beyond the current tab's session cache (`chrome.storage.session`, cleared when Chrome closes), the user's profile preference, and the bridge switch and pairing key (`chrome.storage.local`, on-device only). No "collection" in the sense the CWS form defines: nothing reaches the publisher or any third party, and nothing leaves the user's device except into the user's own local process._
 
 ### Certifications (all THREE must be checked)
 
@@ -195,7 +200,7 @@ _Required even for local-only extensions per CWS User Data FAQ Q14 ([source](htt
 
 ## 4. Permissions justifications
 
-Enter each of the four below into the corresponding "justify" text box on the Privacy practices tab.
+Enter each of the six below into the corresponding "justify" text box on the Privacy practices tab (the last two are new with 1.6.0).
 
 ### `activeTab` justification
 ```
@@ -214,7 +219,17 @@ Required to copy the generated Markdown result to the user's clipboard automatic
 
 ### `storage` justification
 ```
-Used exclusively to persist the user's own extension preferences locally on their device: (1) chrome.storage.local remembers the last-selected extraction profile (auto, docs, marketing, research, dashboard, wordpress-marketing) between sessions; (2) chrome.storage.session caches the most-recent extraction result per tab so that closing the popup mid-extraction and reopening it restores the finished result. No data is transmitted anywhere.
+Used exclusively to persist the user's own extension preferences locally on their device: (1) chrome.storage.local remembers the last-selected extraction profile (auto, docs, marketing, research, dashboard, wordpress-marketing) between sessions; (2) chrome.storage.session caches the most-recent extraction result per tab so that closing the popup mid-extraction and reopening it restores the finished result; (3) since 1.6.0, chrome.storage.local also holds the Agent Bridge on/off switch and the random pairing key the user pastes into their local MCP server. No data is transmitted anywhere by storage itself.
+```
+
+### `alarms` justification (new in 1.6.0)
+```
+Used for one timer only: while the user leaves the Agent Bridge switch on, wake the service worker every 30 seconds to retry the bridge's connection to the Page2AI MCP server on the user's own machine (ws://127.0.0.1:3025). A plain timer dies when Chrome puts the service worker to sleep, so a server started after the browser would never be reached. The alarm is created only while the switch is on, cleared when it is turned off, carries no data, and contacts no one: it only retries a connection to the user's own machine. Chrome shows no install warning for alarms.
+```
+
+### Optional site access justification (new in 1.6.0; `optional_host_permissions`: `http://*/*`, `https://*/*`)
+```
+Requested only when the user turns on the Agent Bridge switch in the popup, and removed when the switch is turned off. The bridge opens pages in background tabs for the user's own local MCP server; activeTab covers only the tab the user invoked the extension on, so it cannot cover a tab the bridge opened. The package declares no host_permissions of its own, so at install and after every update the extension cannot read any site until the user grants this, and because the grant is optional, an update adding it does not disable the extension. Without the grant the bridge refuses before opening any tab, and the user's own popup extractions are unaffected.
 ```
 
 ### Remote code (required question)
