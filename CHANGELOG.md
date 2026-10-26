@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-26
+
 ### Added
 
 - **The Agent Bridge pairs with a key** (protocol `page2ai-bridge/2`, `@page2ai/mcp` 0.6.0 or later). The first time the switch is turned on, Page2AI makes a random key; the popup shows it (*Show*, *Copy key*, *New key*) and says where it goes: the MCP server's `PAGE2AI_BRIDGE_KEY` (in Claude Desktop, Page2AI's *Agent Bridge key* setting). On every connection the server must prove it knows the key before Page2AI sends its own proof or opens any page: a program that took port 3025 while no server ran gets nothing. Until then any such program could have Page2AI open pages in the signed-in browser and send it their text. The popup names what is wrong: no server, a server without the key or with another one, a program on the port that is not Page2AI (also one that takes the connection and never answers), an outdated server, another browser connected; with several MCP clients it says that the first one started holds the port. Firefox pairs the same way, with no origin to copy.
