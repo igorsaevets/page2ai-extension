@@ -345,7 +345,7 @@ try {
     check('no key: the popup says the server has no key', noKey, `${s2.state}/${s2.problem}: ${s2.text}`);
     check('no key: the popup says where the key goes', /settings/.test(await helpText()) &&
       (await popup.$eval('.bridge-where', (n) => n.textContent ?? '').catch(() => '')).includes('PAGE2AI_BRIDGE_KEY'));
-    check('no key: the server log says what to paste where', /has no PAGE2AI_BRIDGE_KEY: copy the key from the Page2AI popup/.test(stderr));
+    check('no key: the server log says what to paste where', /has no PAGE2AI_BRIDGE_KEY/.test(stderr) && /PAGE2AI_BRIDGE_KEY in this server/.test(stderr) && /Copy key/.test(stderr));
     await stopMcp();
   }
 
