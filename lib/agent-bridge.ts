@@ -13,6 +13,7 @@ import {
   OPTIONS_GLOBAL_KEY,
   type BridgeProblem,
   type StagedOptions,
+  BRIDGE_ORIGINS,
 } from './messages';
 import type { ExtractResult } from './types';
 
@@ -489,11 +490,17 @@ export class BridgeClient {
       return { code: 'RESTRICTED_URL', message: `Refused to extract sensitive URL: ${this.safeHostname(url)}` };
     }
     // Without site access the tab would load and the injection fail. Match
-    // patterns carry no port.
+    // patterns carry no port. Two panel channels questioned whether every
+    // Chromium build reports a specific host covered by the bridge's own
+    // http(s) grant, so the grant itself is the fallback check.
     const { protocol, hostname } = new URL(url);
-    const hasAccess = await browser.permissions
-      .contains({ origins: [`${protocol}//${hostname}/*`] })
-      .catch(() => false);
+    const hasAccess =
+      (await browser.permissions
+        .contains({ origins: [`${protocol}//${hostname}/*`] })
+        .catch(() => false)) ||
+      (await browser.permissions
+        .contains({ origins: [...BRIDGE_ORIGINS] })
+        .catch(() => false));
     return hasAccess ? null : {
       code: 'PERMISSION_REQUIRED',
       message: `Page2AI has no access to ${hostname}: turn the Agent Bridge switch in the Page2AI popup off and on to grant site access`,
