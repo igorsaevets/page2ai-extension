@@ -728,3 +728,114 @@ export class BridgeClient {
     catch { return '(invalid URL)'; }
   }
 }
+
+// ── multi-server manager ────────────────────────────────────────────────
+
+const PORT_RANGE = 8;
+
+export class BridgeManager {
+  private clients = new Map<number, BridgeClient>();
+  private onStateChange: StateCallback | null = null;
+
+  constructor(getKey: () => Promise<string>, singlePort?: number) {
+    if (singlePort != null) {
+      this.clients.set(singlePort, new BridgeClient(getKey, singlePort));
+    } else {
+      for (let p = DEFAULT_PORT; p < DEFAULT_PORT + PORT_RANGE; p++) {
+        this.clients.set(p, new BridgeClient(getKey, p));
+      }
+    }
+    for (const c of this.clients.values()) {
+      c.setStateCallback(() => this.notifyAggregate());
+    }
+  }
+
+  setStateCallback(cb: StateCallback | null): void {
+    this.onStateChange = cb;
+  }
+
+  enable(): void {
+    for (const c of this.clients.values()) void c.enable();
+  }
+
+  disable(): void {
+    for (const c of this.clients.values()) c.disable();
+  }
+
+  onAlarm(name: string): void {
+    for (const c of this.clients.values()) c.onAlarm(name);
+  }
+
+  restart(): void {
+    for (const c of this.clients.values()) c.restart();
+  }
+
+  isConnected(): boolean {
+    for (const c of this.clients.values()) {
+      if (c.isConnected()) return true;
+    }
+    return false;
+  }
+
+  getState(): BridgeState {
+    let anyConnected = false;
+    let anyConnecting = false;
+    for (const c of this.clients.values()) {
+      const s = c.getState();
+      if (s === 'connected') anyConnected = true;
+      else if (s === 'connecting') anyConnecting = true;
+    }
+    if (anyConnected) return 'connected';
+    if (anyConnecting) return 'connecting';
+    return 'disconnected';
+  }
+
+  getProblem(): BridgeProblem | null {
+    if (this.isConnected()) return null;
+    for (const c of this.clients.values()) {
+      const p = c.getProblem();
+      if (p) return p;
+    }
+    return null;
+  }
+
+  isBusy(): boolean {
+    for (const c of this.clients.values()) {
+      if (c.isBusy()) return true;
+    }
+    return false;
+  }
+
+  ownsTab(tabId: number): boolean {
+    for (const c of this.clients.values()) {
+      if (c.ownsTab(tabId)) return true;
+    }
+    return false;
+  }
+
+  onResult(tabId: number, result: ExtractResult, tabUrl: string, documentId?: string, bridgeRun?: string): boolean {
+    for (const c of this.clients.values()) {
+      if (c.onResult(tabId, result, tabUrl, documentId, bridgeRun)) return true;
+    }
+    return false;
+  }
+
+  onInjectError(tabId: number, message: string): boolean {
+    for (const c of this.clients.values()) {
+      if (c.onInjectError(tabId, message)) return true;
+    }
+    return false;
+  }
+
+  connectedCount(): number {
+    let n = 0;
+    for (const c of this.clients.values()) {
+      if (c.isConnected()) n++;
+    }
+    return n;
+  }
+
+  private notifyAggregate(): void {
+    this.onStateChange?.(this.getState(), this.getProblem());
+  }
+}

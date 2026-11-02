@@ -16,7 +16,7 @@ import {
   type Page2aiMessage,
   type ProgressMessage,
 } from '~/lib/messages';
-import { BridgeClient, RECONNECT_ALARM, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
+import { BridgeManager, RECONNECT_ALARM, isBridgeKey, makeBridgeKey } from '~/lib/agent-bridge';
 import { reloadWhenIdle } from '~/lib/update-reload';
 
 const errorText = (e: unknown): string =>
@@ -26,7 +26,7 @@ const BRIDGE_STORAGE_KEY = 'agentBridge';
 const BRIDGE_PORT_KEY = 'agentBridgePort';
 const BRIDGE_KEY_KEY = 'agentBridgeKey';
 
-let bridgeClient: BridgeClient | null = null;
+let bridgeManager: BridgeManager | null = null;
 
 // The key the user pastes into the MCP server's PAGE2AI_BRIDGE_KEY: made on first use,
 // kept in storage.local (this profile only, never synced), replaced on «New key».
@@ -48,15 +48,15 @@ const initBridge = async (): Promise<void> => {
   const enabled = stored[BRIDGE_STORAGE_KEY] === true;
   const port = typeof stored[BRIDGE_PORT_KEY] === 'number' ? stored[BRIDGE_PORT_KEY] : undefined;
 
-  bridgeClient = new BridgeClient(() => getBridgeKey(), port);
+  bridgeManager = new BridgeManager(() => getBridgeKey(), port);
 
-  bridgeClient.setStateCallback((state, problem) => {
+  bridgeManager.setStateCallback((state, problem) => {
     const status: BridgeStatusMessage = { type: 'PAGE2AI_BRIDGE_STATUS', state, problem };
     void browser.runtime.sendMessage(status).catch(() => undefined);
   });
 
   if (enabled) {
-    void bridgeClient.enable();
+    bridgeManager.enable();
   }
 };
 
@@ -98,7 +98,7 @@ export default defineBackground(() => {
   // 30 s while the bridge is on and not connected (a server started later), the
   // startup event once per browser start (alarms may not survive a restart).
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === RECONNECT_ALARM) void bridgeReady.then(() => bridgeClient?.onAlarm(alarm.name));
+    if (alarm.name === RECONNECT_ALARM) void bridgeReady.then(() => bridgeManager?.onAlarm(alarm.name));
   });
   browser.runtime.onStartup.addListener(() => undefined);
 
@@ -107,7 +107,7 @@ export default defineBackground(() => {
   browser.runtime.onUpdateAvailable.addListener(() => {
     reloadWhenIdle(async () => {
       await bridgeReady;
-      return bridgeClient?.isBusy() ?? false;
+      return bridgeManager?.isBusy() ?? false;
     }, () => browser.runtime.reload());
   });
 
@@ -119,12 +119,12 @@ export default defineBackground(() => {
   browser.permissions.onAdded.addListener((p) => {
     if (!touchesBridge(p)) return;
     void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: true });
-    void bridgeReady.then(() => bridgeClient?.enable());
+    void bridgeReady.then(() => bridgeManager?.enable());
   });
   browser.permissions.onRemoved.addListener((p) => {
     if (!touchesBridge(p)) return;
     void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: false });
-    void bridgeReady.then(() => bridgeClient?.disable());
+    void bridgeReady.then(() => bridgeManager?.disable());
   });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -133,7 +133,7 @@ export default defineBackground(() => {
     if (msg?.type === 'PAGE2AI_EXTRACT') {
       // A tab the Agent Bridge opened is the agent's until the bridge closes it: a run
       // started here would put the user's options and result in place of the agent's.
-      if (bridgeClient?.ownsTab(msg.tabId)) {
+      if (bridgeManager?.ownsTab(msg.tabId)) {
         sendResponse({
           ok: false,
           error: 'this tab was opened for an AI agent by the Agent Bridge and closes by itself once the page is read',
@@ -153,7 +153,7 @@ export default defineBackground(() => {
       // result is of the run the bridge started, route it to the MCP server and close
       // the tab. The sender's own URL and document, not the tab's: the tab may have
       // moved on since.
-      if (bridgeClient?.onResult(tabId, msg.result, sender.url ?? sender.tab.url ?? '', sender.documentId, msg.bridgeRun)) {
+      if (bridgeManager?.onResult(tabId, msg.result, sender.url ?? sender.tab.url ?? '', sender.documentId, msg.bridgeRun)) {
         return undefined;
       }
 
@@ -170,7 +170,7 @@ export default defineBackground(() => {
     if (msg?.type === 'PAGE2AI_PROGRESS' && msg.step === STEP_INJECT_ERROR) {
       const tabId = sender.tab?.id ?? msg.tabId;
       if (tabId != null) {
-        bridgeClient?.onInjectError(tabId, msg.message);
+        bridgeManager?.onInjectError(tabId, msg.message);
       }
     }
 
@@ -178,9 +178,9 @@ export default defineBackground(() => {
       void browser.storage.local.set({ [BRIDGE_STORAGE_KEY]: msg.enabled });
       void bridgeReady.then(() => {
         if (msg.enabled) {
-          void bridgeClient?.enable();
+          void bridgeManager?.enable();
         } else {
-          bridgeClient?.disable();
+          bridgeManager?.disable();
         }
       });
       return undefined;
@@ -188,8 +188,8 @@ export default defineBackground(() => {
 
     if (msg?.type === 'PAGE2AI_BRIDGE_STATUS_QUERY') {
       void bridgeReady.then(() => sendResponse({
-        state: bridgeClient?.getState() ?? 'disconnected',
-        problem: bridgeClient?.getProblem() ?? null,
+        state: bridgeManager?.getState() ?? 'disconnected',
+        problem: bridgeManager?.getProblem() ?? null,
       }));
       return true; // answered after initBridge settles
     }
@@ -200,7 +200,7 @@ export default defineBackground(() => {
         sendResponse({ key });
         if (renew) {
           await bridgeReady;
-          bridgeClient?.restart();
+          bridgeManager?.restart();
         }
       });
       return true;
