@@ -122,10 +122,10 @@ Your machine, no cloud, Node.js 20 or later. Every client: [MCP server docs](htt
 **Hosted (zero install):**
 
 ```
-https://page2ai-mcp-remote.vercel.app/api/mcp
+https://page2ai.igorsaevets.com/api/mcp
 ```
 
-Point any MCP client that takes a server URL at it: public pages only, `url` only, at most 20 s per page. The same endpoint serves the [Page2AI plugin in ChatGPT](https://igorsaevets.github.io/page2ai-docs/install/#chatgpt-plugin).
+Point any MCP client that takes a server URL at it: public pages only, `url` and `query` only, at most 60 s per page. The [Page2AI plugin in ChatGPT](https://igorsaevets.github.io/page2ai-docs/install/#chatgpt-plugin) still calls the earlier address, `https://page2ai-mcp-remote.vercel.app/api/mcp`, which keeps answering (at most 20 s per page there).
 
 **Core library** for custom pipelines:
 
