@@ -39,8 +39,14 @@ export const isContentVisible = (el: Node | null | undefined): boolean => {
   const element = el as HTMLElement;
   const s = getCachedComputedStyle(element);
   if (s.display === 'none' || s.visibility === 'hidden') return false;
-  return !element.hidden;
+  // `hidden="until-found"` is a collapsed section that the browser's find-in-page opens (an accordion panel):
+  // Chrome renders it with content-visibility: hidden, not display: none, and the page means it as content.
+  // @page2ai/core keeps it as well (P2A-025: a review page's collapsed check results were dropped).
+  return !element.hidden || isUntilFound(element);
 };
+
+export const isUntilFound = (el: Element): boolean =>
+  (el.getAttribute('hidden') || '').trim().toLowerCase() === 'until-found';
 
 export const isClickablyVisible = (el: Node | null | undefined): boolean => {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
@@ -335,6 +341,48 @@ export const getButtonText = (btn: Element): string => {
   );
 };
 
+// The label a reader sees on a button, for the Markdown: text of visible descendants only, read from the live
+// DOM (no copy, so no network, E-405), with a space where a block-level box ends. getButtonText reads a copy
+// that has no layout, so its innerText is textContent: block spans glued («Alpha titlefile.json») and hidden
+// text came along (P2A-025). Tab discovery keeps getButtonText; only the rendered label changes. Falls back to
+// getButtonFallbackLabel when nothing visible is there (an icon button named by a hidden span or aria-label).
+const LABEL_SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'IMG', 'PICTURE', 'CANVAS']);
+export const getVisibleLabelText = (root: Element): string => {
+  let out = '';
+  const walk = (n: Node, depth: number): void => {
+    for (const c of n.childNodes) {
+      if (c.nodeType === Node.TEXT_NODE) {
+        out += c.textContent || '';
+        continue;
+      }
+      if (c.nodeType !== Node.ELEMENT_NODE) continue;
+      const e = c as Element;
+      if (LABEL_SKIP_TAGS.has(e.tagName.toUpperCase()) || !isContentVisible(e)) continue;
+      if (e.tagName === 'BR') {
+        out += ' ';
+        continue;
+      }
+      if (depth > 60) {
+        out += ` ${e.textContent || ''} `;
+        continue;
+      }
+      const block = !/^(?:inline|contents|ruby)/.test(getCachedComputedStyle(e).display || 'inline');
+      if (block) out += ' ';
+      walk(e, depth + 1);
+      if (block) out += ' ';
+    }
+  };
+  walk(root, 0);
+  // Icon spans often hold a zero-width space (Mintlify): with the box spaces around it, it read as a doubled
+  // space («English  |»). ZWJ (U+200D) stays: emoji sequences need it.
+  return cleanInline(out.replace(ZERO_WIDTH_RE, ''));
+};
+
+export const ZERO_WIDTH_RE = /[​⁠﻿]/g;
+
+export const getButtonLabel = (btn: Element): string =>
+  getVisibleLabelText(btn) || getButtonFallbackLabel(btn);
+
 export const getButtonFallbackLabel = (btn: Element): string => {
   const t = getButtonText(btn);
   if (t) return t;
@@ -570,6 +618,9 @@ export const collectAnchorText = (el: Element): string => {
       const child = c as Element;
       const tag = child.tagName;
       if (['NOSCRIPT', 'SCRIPT', 'STYLE'].includes(tag)) continue;
+      // A hidden part is not in the link's name: a `hidden` «(opens in new tab)» span, or a visibility:hidden
+      // copy of the label that a tab keeps to reserve its bold width («Overview Overview», P2A-025).
+      if (!isContentVisible(child)) continue;
       if (tag === 'IMG') {
         const alt = cleanInline(child.getAttribute('alt') || '');
         if (alt) parts.push(alt);
