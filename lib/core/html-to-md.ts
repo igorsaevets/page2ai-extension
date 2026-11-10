@@ -21,7 +21,7 @@ import {
   collectAnchorText,
   findEnclosingHref,
   findFirstImgInAnchor,
-  getButtonFallbackLabel,
+  getButtonLabel,
   getCachedComputedStyle,
   getDirectLabelText,
   getMathTex,
@@ -36,6 +36,7 @@ import {
   resolveLazyImageSrc,
   resolvePictureSrc,
   shouldSkipImage,
+  ZERO_WIDTH_RE,
 } from './dom';
 import type { ExtractContext, FormFieldRecord, RenderOptions } from '../types';
 
@@ -99,10 +100,18 @@ export const renderInlineChildren = (
   ctx: ExtractContext,
   el: Element,
   skipTags?: Set<string>,
+  level = 0,
+): string => renderInlineNodes(ctx, el.childNodes, skipTags, level);
+
+export const renderInlineNodes = (
+  ctx: ExtractContext,
+  nodes: Iterable<Node>,
+  skipTags?: Set<string>,
+  level = 0,
 ): string => {
   const { config } = ctx;
   const parts: string[] = [];
-  for (const child of el.childNodes) {
+  for (const child of nodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const t = cleanInline(child.textContent);
       if (t) parts.push(t.slice(0, config.maxTextNodeLength));
@@ -143,6 +152,11 @@ export const renderInlineChildren = (
         continue;
       }
       let text = collectAnchorText(c);
+      if (text && !cleanInline(text.replace(ZERO_WIDTH_RE, ''))) {
+        // A heading's self-anchor whose only text is a zero-width space (Mintlify) is not a link a reader sees.
+        if (href.split('#')[0] === location.href.split('#')[0] && href.includes('#')) continue;
+        text = '';
+      }
       if (href.startsWith('mailto:') || href.startsWith('tel:')) {
         text = cleanMailtoTelLabel(href, text);
       }
@@ -162,12 +176,12 @@ export const renderInlineChildren = (
       continue;
     }
     if (tag === 'STRONG' || tag === 'B') {
-      const t = renderInlineChildren(ctx, c) || cleanInline(c.textContent);
+      const t = renderInlineChildren(ctx, c, undefined, level + 1) || cleanInline(c.textContent);
       if (t) parts.push(`**${t}**`);
       continue;
     }
     if (tag === 'EM' || tag === 'I') {
-      const t = renderInlineChildren(ctx, c) || cleanInline(c.textContent);
+      const t = renderInlineChildren(ctx, c, undefined, level + 1) || cleanInline(c.textContent);
       if (t) parts.push(`*${t}*`);
       continue;
     }
@@ -219,7 +233,7 @@ export const renderInlineChildren = (
       c.getAttribute('role') === 'tab' ||
       c.getAttribute('role') === 'combobox'
     ) {
-      const t = getButtonFallbackLabel(c);
+      const t = getButtonLabel(c);
       const eh = findEnclosingHref(c);
       if (eh && t) parts.push(`[CTA Button: ${esc(ctx, t)}](${eh})`);
       else if (isDropdownButton(c)) parts.push(`[Dropdown Button: ${t}]`);
@@ -227,22 +241,140 @@ export const renderInlineChildren = (
       continue;
     }
     if (INLINE_FORMATTING_TAGS.has(tag)) {
-      const t = renderInlineChildren(ctx, c) || cleanInline(c.textContent);
+      const t = renderInlineChildren(ctx, c, undefined, level + 1) || cleanInline(c.textContent);
       if (t) parts.push(t);
       continue;
     }
-    const t = cleanInline(c.textContent || '');
+    // Any other element (a <div>, <p>, <section>, <label>, a custom element) renders its children the same way,
+    // so the links, code and images inside it survive, its hidden parts stay out, and its words are joined to
+    // the neighbours' with a space. It used to be printed through textContent, which glues text at every block
+    // boundary («sentence.Docs»), drops link targets and keeps hidden text (P2A-025).
+    const t = level > 60 ? cleanInline(c.textContent || '') : renderInlineChildren(ctx, c, undefined, level + 1);
     if (t) parts.push(t);
   }
   return cleanInline(parts.join(' ')).replace(/\s+\n\s+/g, '\n');
 };
 
-const LI_BLOCK_SKIP = new Set([
-  'UL', 'OL', 'DL', 'TABLE', 'BLOCKQUOTE', 'DETAILS', 'FIGURE', 'PRE', 'HR',
-]);
+// --- List items (P2A-025) ---
+//
+// An <li> renders in document order, the way @page2ai/core's renderListItem does: its inline content goes on the
+// bullet line, and a paragraph or block inside it goes below, indented to the item's content column so a
+// Markdown parser keeps it inside the item. React and Tailwind apps wrap item content in <div>s; the old item
+// renderer printed every such wrapper through textContent and dropped a <pre>, <table>, <blockquote>,
+// <details>, <figure> or <dl> that sat directly in the item.
 
-export const renderLiInlineText = (ctx: ExtractContext, li: Element): string =>
-  renderInlineChildren(ctx, li, LI_BLOCK_SKIP);
+type ItemSegment = { kind: 'text' | 'para' | 'block' | 'list'; lines: string[] };
+
+// A wrapper that holds only inline content stays on the bullet line (`<li><div>text <a>link</a></div></li>`).
+// One that holds block structure is walked like the item itself.
+const LI_CONTAINER_TAGS = new Set([
+  'DIV', 'SECTION', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV', 'MAIN', 'ADDRESS', 'HGROUP',
+]);
+const LI_BLOCK_CONTENT =
+  'p, div, pre, table, ul, ol, dl, blockquote, figure, details, section, article, aside, header, footer, nav, ' +
+  'main, address, form, fieldset, hr, h1, h2, h3, h4, h5, h6';
+// Rendered by renderNode below the bullet.
+const LI_BLOCK_TAGS = new Set([
+  'PRE', 'TABLE', 'BLOCKQUOTE', 'DETAILS', 'FIGURE', 'DL', 'HR', 'FORM', 'FIELDSET', 'DIALOG',
+]);
+// A paragraph of its own inside the item. A heading inside an item is printed as its text, not as a `#` line:
+// a feed or a sidebar of cards would otherwise put a heading per item into the page's outline.
+const LI_PARA_RE = /^(?:P|H[1-6])$/;
+
+// A wrapper whose walk would skip what renderNode does for it: an aria-hidden note, a captured tab or dropdown
+// panel's marker, a math container. Those go to renderNode whole.
+const isPlainItemContainer = (ctx: ExtractContext, c: Element, opts: ResolvedRenderOptions): boolean =>
+  c.getAttribute('aria-hidden') !== 'true' &&
+  !isMathContainer(c) &&
+  !(opts.skipCapturedTabPanels &&
+    (ctx.state.capturedTabPanelElements.has(c) || ctx.state.dedupSuppressedTabPanelElements.has(c))) &&
+  !(opts.skipCapturedDropdownPanels && ctx.state.capturedDropdownPanelElements.has(c));
+
+const renderItemFlow = (
+  ctx: ExtractContext,
+  nodes: Iterable<Node>,
+  depth: number,
+  opts: ResolvedRenderOptions,
+  segs: ItemSegment[],
+  level = 0,
+): void => {
+  const { config } = ctx;
+  let run: Node[] = [];
+  const flush = (): void => {
+    if (!run.length) return;
+    const t = renderInlineNodes(ctx, run);
+    run = [];
+    if (t) segs.push({ kind: 'text', lines: t.split('\n') });
+  };
+  for (const node of nodes) {
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      run.push(node);
+      continue;
+    }
+    const c = node as HTMLElement;
+    const t = c.tagName;
+    if (isSkippable(c, config)) continue;
+    if (!config.includeHiddenMeaningfulText && !isContentVisible(c)) continue;
+    if (t === 'UL' || t === 'OL') {
+      flush();
+      segs.push({ kind: 'list', lines: renderNode(ctx, c, depth + 1, opts) });
+    } else if (LI_PARA_RE.test(t)) {
+      flush();
+      const p = renderInlineChildren(ctx, c);
+      if (p) segs.push({ kind: 'para', lines: p.split('\n') });
+    } else if (LI_CONTAINER_TAGS.has(t) && c.querySelector(LI_BLOCK_CONTENT)) {
+      flush();
+      if (level < 40 && isPlainItemContainer(ctx, c, opts)) {
+        renderItemFlow(ctx, c.childNodes, depth, opts, segs, level + 1);
+      } else {
+        segs.push({ kind: 'block', lines: renderNode(ctx, c, 0, opts) });
+      }
+    } else if (LI_BLOCK_TAGS.has(t)) {
+      flush();
+      segs.push({ kind: 'block', lines: renderNode(ctx, c, 0, opts) });
+    } else {
+      run.push(c);
+    }
+  }
+  flush();
+};
+
+// The first line of the item's content goes on the bullet line (a bare `-` under a line of text would be a setext
+// underline); a block opened there continues at the exact content column, so a fence strips nothing from its
+// code. Every later paragraph or block is set off by a blank line and indented to at least INDENT, the depth a
+// nested list already uses. A nested list keeps the lines renderNode gave it.
+const emitListItem = (
+  segs: ItemSegment[],
+  pfx: string,
+  marker: string,
+): { lines: string[]; markerAt: number } => {
+  const exact = pfx + ' '.repeat(marker.length + 1);
+  const cont = pfx + ' '.repeat(Math.max(INDENT.length, marker.length + 1));
+  const out: string[] = [];
+  let markerAt = -1;
+  for (const s of segs) {
+    if (s.kind === 'list') {
+      out.push(...s.lines);
+      continue;
+    }
+    const lines = s.lines.join('\n').split('\n');
+    while (lines.length && !lines[0]!.trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();
+    if (!lines.length) continue;
+    if (markerAt < 0) {
+      const first = lines[0]!.trimStart();
+      // `- ---` is a thematic break, not an item holding one.
+      out.push(`${pfx}${marker} ${marker === '-' && /^-{3,}$/.test(first) ? '***' : first}`);
+      markerAt = out.length - 1;
+      const ind = s.kind === 'block' ? exact : cont;
+      for (const l of lines.slice(1)) out.push(l.trim() ? ind + l : '');
+      continue;
+    }
+    if (out.length && out[out.length - 1] !== '') out.push('');
+    for (const l of lines) out.push(l.trim() ? cont + l : '');
+  }
+  return { lines: out, markerAt };
+};
 
 // --- Form rendering (Section 28) ---
 
@@ -609,7 +741,7 @@ export const renderButton = (
 ): string[] => {
   const lines: string[] = [];
   const pfx = INDENT.repeat(depth);
-  const text = getButtonFallbackLabel(btn);
+  const text = getButtonLabel(btn);
   const bid = btn.dataset.aiExporterButtonId || '';
   const did = btn.dataset.aiExporterDropdownId || '';
   const tp = ctx.state.tabPanelsByButtonId.get(bid);
@@ -952,25 +1084,32 @@ export const renderNode = (
   } else if (tag === 'TABLE') {
     return renderTable(el as HTMLTableElement, depth);
   } else if (tag === 'LI') {
-    const text = renderLiInlineText(ctx, el);
     const parentTag = el.parentElement ? el.parentElement.tagName : '';
     const listType = opts.listType || (parentTag === 'OL' ? 'ol' : 'ul');
     const pseudoB = config.includePseudoBeforeText ? getPseudoContent(el, '::before') : '';
     const pseudoA = config.includePseudoAfterText ? getPseudoContent(el, '::after') : '';
     const marker = listType === 'ol' ? `${opts.listIndex || 1}.` : '-';
     const incPB = pseudoB && !isRedundantListPseudoMarker(pseudoB, listType);
-    const rt = cleanInline([incPB ? pseudoB : '', text, pseudoA].filter(Boolean).join(' '));
-    if (rt) {
-      if (ariaHiddenNote) lines.push(`${pfx}${ariaHiddenNote}`);
-      if (stepNote) lines.push(`${pfx}${stepNote}`);
-      if (importanceNote) lines.push(`${pfx}${importanceNote}`);
-      lines.push(`${pfx}${marker} ${rt}`);
+    const segs: ItemSegment[] = [];
+    renderItemFlow(ctx, el.childNodes, depth, opts, segs);
+    // Pseudo-element text joins the item's first and last text, as it did when the item was one line.
+    const textual = segs.filter((s) => s.kind === 'text' || s.kind === 'para');
+    if (incPB) {
+      const first = segs.find((s) => s.kind !== 'list');
+      if (first && first.kind !== 'block') first.lines[0] = cleanInline(`${pseudoB} ${first.lines[0] ?? ''}`);
+      else segs.unshift({ kind: 'text', lines: [cleanInline(pseudoB)] });
     }
-    for (const c of el.children) {
-      if (c.tagName === 'UL' || c.tagName === 'OL') {
-        lines.push(...renderNode(ctx, c, depth + 1, opts));
-      }
+    if (pseudoA) {
+      const last = textual[textual.length - 1];
+      if (last) last.lines[last.lines.length - 1] = cleanInline(`${last.lines[last.lines.length - 1] ?? ''} ${pseudoA}`);
+      else segs.push({ kind: 'text', lines: [cleanInline(pseudoA)] });
     }
+    const item = emitListItem(segs, pfx, marker);
+    if (item.markerAt >= 0) {
+      const notes = [ariaHiddenNote, stepNote, importanceNote].filter(Boolean).map((n) => `${pfx}${n}`);
+      item.lines.splice(item.markerAt, 0, ...notes);
+    }
+    lines.push(...item.lines);
   } else if (tag === 'UL' || tag === 'OL') {
     const lis = [...el.children].filter((c) => c.tagName === 'LI');
     for (let i = 0; i < lis.length; i++) {

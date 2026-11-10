@@ -140,6 +140,11 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-agent.mjs
+      # P2A-025: list items built from <div>/<p> wrappers, blocks inside items, and plain lists as the control.
+      - name: List-items suite (agent script)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-list-items.mjs
       - name: Tab-panels suite, run by the agent script (never-click list in the main world)
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}

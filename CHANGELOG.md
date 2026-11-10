@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-10
+
+### Fixed
+
+- **List items built from `<div>` and `<p>` wrappers** (P2A-025), the way React and Tailwind apps render feeds, review lists and settings: an item used to be printed through `textContent`, so words glued at every block boundary («sentence.Docs»), links lost their URLs, code lost its backticks and hidden text was printed. An item now renders in document order like `@page2ai/core`: its inline content on the bullet line, each paragraph or block below it, indented under the bullet. A wrapper that holds only inline content stays on the bullet line.
+- **A `<pre>`, `<table>`, `<blockquote>`, `<details>`, `<figure>` or `<dl>` directly inside a list item was dropped.** It now renders under its bullet: the code of a «1. Install:» step, a sidebar group in `<details>`. On the 39 saved test pages, 65 fenced code blocks came back on six pages, and no page lost a code block, table row or heading.
+- **Any other element in running text** (a `<div>`, `<section>`, `<label>`, a custom element inside a paragraph, heading or link) renders its children instead of its `textContent`: links and code inside it survive, hidden parts stay out.
+- **Link text leaves out hidden parts**: a `hidden` «(opens in new tab)» span, or a `visibility:hidden` copy of a tab's label that reserves its bold width («Overview Overview»).
+- **Button labels** keep a space between block-level parts («Search ⌘K», «Navigation Get started Introduction») and leave out hidden text.
+- **A section under `hidden="until-found"`** (a collapsed panel the browser's find-in-page opens) is kept, as `@page2ai/core` keeps it.
+- A heading's self-anchor whose only text is a zero-width space (VitePress, Mintlify) is no longer printed as `[​](#anchor)`.
+
 ## [1.6.0] - 2026-10-26
 
 ### Added
