@@ -145,6 +145,12 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-list-items.mjs
+      # P2A-063..P2A-067, P2A-069: icon fonts, text nobody sees, listboxes, ARIA headings, <a> without href, the
+      # quality ratio; sr-only labels, visible aria-hidden text and collapsed panels as controls.
+      - name: App-interface suite (agent script)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-dashboard-noise.mjs
       - name: Tab-panels suite, run by the agent script (never-click list in the main world)
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}

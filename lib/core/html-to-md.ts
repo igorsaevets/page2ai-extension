@@ -21,17 +21,25 @@ import {
   collectAnchorText,
   findEnclosingHref,
   findFirstImgInAnchor,
+  getAriaHeadingLevel,
+  getAttributeName,
   getButtonLabel,
   getCachedComputedStyle,
+  getCollapsedListboxValue,
   getDirectLabelText,
+  getIconOwnName,
+  getListboxMarker,
   getMathTex,
   getOwnText,
   getPseudoContent,
   isAnchorContentOnlyImage,
   isContentVisible,
   isDropdownButton,
+  isIconGlyphElement,
+  isIconText,
   isMathContainer,
   isRedundantListPseudoMarker,
+  getVisibleLabelText,
   isSkippable,
   resolveLazyImageSrc,
   resolvePictureSrc,
@@ -113,6 +121,7 @@ export const renderInlineNodes = (
   const parts: string[] = [];
   for (const child of nodes) {
     if (child.nodeType === Node.TEXT_NODE) {
+      if (isIconText(child)) continue;
       const t = cleanInline(child.textContent);
       if (t) parts.push(t.slice(0, config.maxTextNodeLength));
       continue;
@@ -120,6 +129,11 @@ export const renderInlineNodes = (
     if (child.nodeType !== Node.ELEMENT_NODE) continue;
     const c = child as HTMLElement;
     if (skipTags && skipTags.has(c.tagName)) continue;
+    if (isIconGlyphElement(c)) {
+      const nm = getIconOwnName(c);
+      if (nm && isContentVisible(c)) parts.push(nm);
+      continue;
+    }
     if (isSkippable(c, config)) continue;
     if (!config.includeHiddenMeaningfulText && !isContentVisible(c)) continue;
     const tag = c.tagName;
@@ -127,7 +141,15 @@ export const renderInlineNodes = (
       parts.push('\n');
       continue;
     }
-    if (tag === 'A') {
+    const lbv = getCollapsedListboxValue(c);
+    if (lbv !== null) {
+      if (lbv) parts.push(getListboxMarker(c, lbv));
+      continue;
+    }
+    // An <a> without href is not a link but «a placeholder for where a link might otherwise have been placed»
+    // (HTML, the a element): it falls through to a button (role="button") or to its text. absUrl('') is the page's
+    // own URL, so it used to print as a link to the page itself (P2A-067). href="" stays a link to the document.
+    if (tag === 'A' && c.hasAttribute('href')) {
       const href = absUrl(c.getAttribute('href') || '');
       if (!href || isWordPressNoiseLink(href, config)) continue;
       const realImg = findFirstImgInAnchor(c);
@@ -157,6 +179,8 @@ export const renderInlineNodes = (
         if (href.split('#')[0] === location.href.split('#')[0] && href.includes('#')) continue;
         text = '';
       }
+      // A link whose content was only an icon is named by its attributes (P2A-063).
+      if (!text) text = getAttributeName(c);
       if (href.startsWith('mailto:') || href.startsWith('tel:')) {
         text = cleanMailtoTelLabel(href, text);
       }
@@ -805,6 +829,7 @@ export const renderNode = (
   const lines: string[] = [];
   if (depth > 120) return lines;
   if (node.nodeType === Node.TEXT_NODE) {
+    if (isIconText(node)) return lines;
     const t = cleanInline(node.textContent);
     if (t) lines.push(t.slice(0, config.maxTextNodeLength));
     return lines;
@@ -816,6 +841,11 @@ export const renderNode = (
   if (node.nodeType !== Node.ELEMENT_NODE) return lines;
   const el = node as HTMLElement;
   const tag = el.tagName;
+  if (isIconGlyphElement(el)) {
+    const nm = getIconOwnName(el);
+    if (nm && isContentVisible(el)) lines.push(`${INDENT.repeat(depth)}${nm}`);
+    return lines;
+  }
   if (isSkippable(el, config)) return lines;
   if (!config.includeHiddenMeaningfulText && !isContentVisible(el)) return lines;
   if (opts.skipCapturedTabPanels && ctx.state.capturedTabPanelElements.has(el)) {
@@ -836,7 +866,9 @@ export const renderNode = (
   const stepNote = getStepNumberNote(ctx, el);
 
   if (el.getAttribute('aria-hidden') === 'true') {
-    const vt = cleanInline(el.textContent || '');
+    // Its visible text without icon glyphs, a space only where a block box ends (getVisibleLabelText, P2A-025):
+    // textContent printed `help_outline` and glued block boundaries («IndexFetch the complete…», P2A-063).
+    const vt = getVisibleLabelText(el);
     if (vt && /[\p{L}\p{N}]/u.test(vt)) {
       lines.push('');
       if (ariaHiddenNote) lines.push(ariaHiddenNote);
@@ -846,6 +878,12 @@ export const renderNode = (
       lines.push('');
       return lines;
     }
+  }
+
+  const lbv = getCollapsedListboxValue(el);
+  if (lbv !== null) {
+    if (lbv) lines.push(`${pfx}${getListboxMarker(el, lbv)}`);
+    return lines;
   }
 
   if (opts.includeRegionMarkers) {
@@ -867,7 +905,7 @@ export const renderNode = (
       if (ri && isAnchorContentOnlyImage(a)) {
         text = cleanInline(ri.getAttribute('alt') || ri.getAttribute('aria-label') || '');
       } else {
-        text = collectAnchorText(a);
+        text = collectAnchorText(a) || getAttributeName(a);
       }
       if (href.startsWith('mailto:') || href.startsWith('tel:')) {
         text = cleanMailtoTelLabel(href, text);
@@ -894,7 +932,9 @@ export const renderNode = (
   }
   if (tag === 'IFRAME') {
     if (config.extractIframeSources) {
-      const src = absUrl(el.getAttribute('src') || el.getAttribute('data-src') || '');
+      // absUrl('') is the page's own URL: an iframe without a source is not an embed of this page (P2A-067).
+      const rawSrc = el.getAttribute('src') || el.getAttribute('data-src') || '';
+      const src = rawSrc ? absUrl(rawSrc) : '';
       const title = cleanInline(el.getAttribute('title') || '');
       if (src) {
         lines.push(
@@ -958,8 +998,11 @@ export const renderNode = (
     return lines;
   }
 
-  if (/^H[1-6]$/.test(tag)) {
-    const level = Number(tag.slice(1));
+  // `role="heading"` with aria-level is a heading on any element (Search Console: <span role="heading"
+  // aria-level="1">Page with redirect</span>, printed as plain text before, P2A-066).
+  const ariaLevel = getAriaHeadingLevel(el);
+  if (/^H[1-6]$/.test(tag) || ariaLevel) {
+    const level = ariaLevel || Number(tag.slice(1));
     const t = renderInlineChildren(ctx, el) || cleanInline(el.innerText || el.textContent);
     if (t) {
       // #8 (port of core#9): while the title-dedupe window is open, the first
@@ -1006,7 +1049,8 @@ export const renderNode = (
       lines.push(t);
       lines.push('');
     }
-  } else if (tag === 'A') {
+  } else if (tag === 'A' && el.hasAttribute('href')) {
+    // An <a> without href is not a link (P2A-067): it renders as a button (role="button") or as its content below.
     const href = absUrl(el.getAttribute('href') || '');
     if (!href || isWordPressNoiseLink(href, config)) return lines;
     const ri = findFirstImgInAnchor(el);
@@ -1040,6 +1084,8 @@ export const renderNode = (
       }
     } else {
       let text = collectAnchorText(el);
+      // A link whose content was only an icon is named by its attributes (P2A-063).
+      if (!text) text = getAttributeName(el);
       if (href.startsWith('mailto:') || href.startsWith('tel:')) {
         text = cleanMailtoTelLabel(href, text);
       }

@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-20
+
+App interfaces such as Google Search Console come out without their interface noise (P2A-063..P2A-067, P2A-069).
+
+### Fixed
+
+- **Icon fonts are no longer printed as words** (P2A-063). Material Icons, Material Symbols and Google Symbols draw an icon from a word (`help_outline`, `home`, `keyboard_arrow_down`) or from a private-use code point; that word or glyph stood before menu items (`home Overview`) and named icon-only buttons (`[Button: notifications]`). Text set in such a font, and a text node made only of private-use characters, is left out; text that mixes them with letters stays. An icon that names itself (`role="img"` with `aria-label`) prints that name.
+- **Controls and links whose visible text is empty are named by their attributes**: `aria-labelledby`, then `aria-label`, then `title`, in the order accessible-name computation uses (`[Button: Unread messages: 11]`, `[GitHub repository](…)` instead of `[link](…)`). A link whose content is an image still prints the image's text, so an account avatar's label (a name, an e-mail address) is not printed.
+- **Text nobody sees is not page content** (P2A-064): an `aria-hidden` element cut to a 1 × 1 px box (Search Console's tooltips, parked at x = −10000) and a live region cut to a 1 px box (an SPA's route announcer, «Loading…»). Screen-reader-only text that is neither stays, and so do visible `aria-hidden` text and a collapsed panel.
+- **A listbox that shows only its chosen option** (a filter, «Rows per page») prints `[Listbox: Number of rows per page | selected: 10]` instead of every option on a line of its own (P2A-065). A listbox whose options are all shown renders as before.
+- **`role="heading"` is a heading** at its `aria-level` (level 2 without one) (P2A-066).
+- **An `<a>` without `href` is not a link** (P2A-067): it prints as a button (`role="button"`) or as its text, not as a link to the page itself. `href=""` stays a link to the document. An `<iframe>` without a source is no longer listed as an embed of the page, and `canonical` is empty when the page declares none instead of repeating its address.
+- **The quality ratio leaves link targets out** (P2A-069). On a page of links the URLs were most of the Markdown, so the block said `OVER-EXTRACTED-NOISE`; a new line gives the text length, and the advice no longer names settings the popup does not have.
+
+Not in this release: a chart drawn in SVG still leaves no trace in the Markdown (P2A-068).
+
 ## [1.7.1] - 2026-11-10
 
 ### Fixed
