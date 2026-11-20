@@ -12,13 +12,19 @@ export interface QualityMetricsBlock {
   ratioStatus: QualityRatioStatus;
 }
 
+// Link and image targets are not text a reader sees: on a page of links they were most of the Markdown (Search
+// Console: 58-60 % of the characters), and the ratio called the page over-extracted for its URL lengths (P2A-069).
+// `](…)` with one level of parentheses inside, the way the renderer writes targets.
+export const stripLinkTargets = (md: string): string => md.replace(/\]\((?:[^()\s]|\([^()\s]*\))*\)/g, ']');
+
 export const buildQualityMetricsBlock = (
   config: ResolvedConfig,
   appendix: AppendixData,
   mainRenderText: string,
   baselineText: string,
 ): QualityMetricsBlock => {
-  const ratio = baselineText.length > 0 ? mainRenderText.length / baselineText.length : 1;
+  const textChars = stripLinkTargets(mainRenderText).length;
+  const ratio = baselineText.length > 0 ? textChars / baselineText.length : 1;
   let status: QualityRatioStatus = 'OK';
   if (ratio < config.minMainRenderToBodyRatio) status = 'UNDER-EXTRACTED';
   else if (ratio > config.maxMainRenderToBodyRatio) status = 'OVER-EXTRACTED-NOISE';
@@ -26,6 +32,7 @@ export const buildQualityMetricsBlock = (
   const ls = [
     `<!-- AI: QUALITY METRICS -->`,
     `<!-- main_render_chars: ${mainRenderText.length} -->`,
+    `<!-- main_render_text_chars (link targets left out): ${textChars} -->`,
     `<!-- body_inner_text_chars (baseline): ${baselineText.length} -->`,
     `<!-- main_to_body_ratio: ${ratio.toFixed(3)} -->`,
     `<!-- ratio_status: ${status} -->`,
@@ -41,8 +48,9 @@ export const buildQualityMetricsBlock = (
   ];
   if (status === 'OVER-EXTRACTED-NOISE') {
     ls.push(
-      `<!-- WARNING: main render is ${ratio.toFixed(2)}x of body innerText. -->`,
-      `<!-- Consider: aggressiveCleanup=true, stripNoisyAttributesInLinkText=true, filterDecorativeImages=true. -->`,
+      `<!-- WARNING: main render text is ${ratio.toFixed(2)}x of body innerText. -->`,
+      // The old advice named config flags no popup control sets (P2A-069).
+      `<!-- The extra text is usually menus, repeated blocks or interface labels: read them as page chrome. -->`,
     );
   } else if (status === 'UNDER-EXTRACTED') {
     ls.push(`<!-- WARNING: main render captured only ${(ratio * 100).toFixed(1)}% of baseline. -->`);

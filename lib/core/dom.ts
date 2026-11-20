@@ -286,6 +286,73 @@ export const isInsideDangerousNavigationArea = (el: Node | null | undefined): bo
   );
 };
 
+// --- Icon fonts, cut boxes and live regions (P2A-063, P2A-064) ---
+
+// A font that draws an icon from a word set in it (a ligature: `home`, `help_outline`, `keyboard_arrow_down`) or
+// from a private-use code point. What such an element holds is the icon's name, not words a reader sees: Material
+// Symbols draw an icon from its textual name by ligatures or from its code point
+// (https://developers.google.com/fonts/docs/material_symbols). Matched on the first family of the element's computed
+// font-family, as the page declares it: Search Console sets 'Google Symbols' and 'Material Icons Extended' on
+// aria-hidden spans beside the real label (measured T275). Fonts that draw from ::before content never reach the
+// walk; those that put code points in the text are caught by isPrivateUseOnly.
+const ICON_FONT_FAMILY_RE =
+  /^["']?(?:google[ _-]?symbols|(?:google[ _-]?)?material[ _-]?(?:icons|symbols)(?:[ _-][\w ]+)?)["']?$/i;
+export const isIconFontElement = (el: Element): boolean => {
+  const first = (getCachedComputedStyle(el).fontFamily || '').split(',')[0] || '';
+  return ICON_FONT_FAMILY_RE.test(first.trim());
+};
+
+// U+E000-U+F8FF and planes 15-16 carry no standard meaning (https://www.unicode.org/faq/private_use.html): icon fonts
+// draw their glyphs there. Only a text node made of nothing else is treated as an icon; text that mixes them with
+// letters stays (legacy CJK fonts map characters there too, P2A-020).
+const PRIVATE_USE_ONLY_RE =
+  /^[\s\u200B-\u200D\u2060\uFEFF]*(?:[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}][\s\u200B-\u200D\u2060\uFEFF]*)+$/u;
+export const isPrivateUseOnly = (s: string | null | undefined): boolean => !!s && PRIVATE_USE_ONLY_RE.test(s);
+
+// An element whose text is all set in an icon font: the icon itself. One that also holds an element set in another
+// font is not; the walk goes into it and leaves out only the icon text (isIconText).
+export const isIconGlyphElement = (el: Element): boolean => {
+  if (!isIconFontElement(el) || el.childElementCount > 8) return false;
+  for (const d of el.querySelectorAll('*')) {
+    if (cleanInline(d.textContent || '') && !isIconFontElement(d)) return false;
+  }
+  return true;
+};
+
+// A text node an icon font draws, or one made of private-use glyphs only.
+export const isIconText = (n: Node): boolean => {
+  if (isPrivateUseOnly(n.textContent)) return true;
+  const p = n.parentElement;
+  return !!p && isIconFontElement(p);
+};
+
+// The name an icon gives itself (`<span class="material-icons" role="img" aria-label="Delete">delete</span>`): used
+// in place of its glyph, never its ligature word.
+export const getIconOwnName = (el: Element): string =>
+  el.getAttribute('aria-hidden') === 'true' ? '' : cleanInline(el.getAttribute('aria-label') || '');
+
+// A box at most 1 px in a direction whose overflow is cut or clipped: the visually hidden pattern (sr-only, WebAIM's
+// off-screen class, Search Console's tooltips: 1 x 1 px at x = -10000, and its route announcer: 88 x 1 px at
+// y = -1000, measured T275/T276). `both` asks for 1 x 1: a collapsed accordion panel is 0 px tall but full width,
+// and it is content. Layout exists on the live page only, so a copy in another document never matches.
+export const isClippedTinyBox = (el: Element, both: boolean): boolean => {
+  if (!el.isConnected || el.ownerDocument !== document) return false;
+  const s = getCachedComputedStyle(el);
+  if (s.display === 'none' || s.display === 'contents') return false;
+  const r = el.getBoundingClientRect();
+  const tiny = both ? r.width <= 1 && r.height <= 1 : r.width <= 1 || r.height <= 1;
+  if (!tiny) return false;
+  const cut = (v: string): boolean => v === 'hidden' || v === 'clip';
+  return cut(s.overflowX) || cut(s.overflowY) || (!!s.clip && s.clip !== 'auto') || (!!s.clipPath && s.clipPath !== 'none');
+};
+
+const LIVE_REGION_ROLES = new Set(['status', 'alert', 'log', 'marquee', 'timer']);
+export const isLiveRegion = (el: Element): boolean => {
+  const live = (el.getAttribute('aria-live') || '').trim().toLowerCase();
+  return live === 'polite' || live === 'assertive' ||
+    LIVE_REGION_ROLES.has((el.getAttribute('role') || '').trim().toLowerCase());
+};
+
 export const isSkippable = (
   el: Node | null | undefined,
   config: Pick<
@@ -300,7 +367,14 @@ export const isSkippable = (
     if (!config.includeVisibleAriaHiddenText) return true;
     const t = cleanInline(element.textContent || '');
     if (!(t.length >= config.minAriaHiddenTextLength && /[\p{L}\p{N}]/u.test(t))) return true;
+    // Hidden from assistive technology and cut to a 1 x 1 px box: nobody perceives it (P2A-064). aria-hidden text
+    // is kept on the premise that it is visibly rendered (E-370); this one is not.
+    if (isClippedTinyBox(element, true)) return true;
   }
+  // A live region cut to a 1 px box speaks to screen readers only: an SPA's route announcer («Page indexing» after
+  // in-app navigation), «Loading…». Not page content (P2A-064).
+  if (isLiveRegion(element) && isClippedTinyBox(element, false)) return true;
+  if (isIconGlyphElement(element)) return true;
   return false;
 };
 
@@ -352,12 +426,18 @@ export const getVisibleLabelText = (root: Element): string => {
   const walk = (n: Node, depth: number): void => {
     for (const c of n.childNodes) {
       if (c.nodeType === Node.TEXT_NODE) {
-        out += c.textContent || '';
+        // An icon's glyph is not part of the label (P2A-063): `help_outline`, U+E152.
+        if (!isIconText(c)) out += c.textContent || '';
         continue;
       }
       if (c.nodeType !== Node.ELEMENT_NODE) continue;
       const e = c as Element;
       if (LABEL_SKIP_TAGS.has(e.tagName.toUpperCase()) || !isContentVisible(e)) continue;
+      if (isIconGlyphElement(e)) {
+        const nm = getIconOwnName(e);
+        if (nm) out += ` ${nm} `;
+        continue;
+      }
       if (e.tagName === 'BR') {
         out += ' ';
         continue;
@@ -380,8 +460,32 @@ export const getVisibleLabelText = (root: Element): string => {
 
 export const ZERO_WIDTH_RE = /[​⁠﻿]/g;
 
+// The name a control states in its attributes: aria-labelledby, then aria-label, then title. accname 1.2 puts the
+// first two before the name from content and title after it (https://www.w3.org/TR/accname-1.2/, step 2), so they
+// are read when the visible text is empty once icon glyphs are left out. Before, an icon-only control was named by
+// its glyph: `[Button: notifications]` for «Unread messages: 11» (P2A-063).
+export const getAttributeName = (el: Element): string => {
+  const ids = (el.getAttribute('aria-labelledby') || '').trim().split(/\s+/).filter(Boolean);
+  if (ids.length) {
+    const t = cleanInline(
+      ids
+        .map((id) => {
+          const r = el.ownerDocument.getElementById(id);
+          if (!r) return '';
+          // A control that lists itself (react-aria: aria-labelledby="<own id> <label id>") brings its own
+          // aria-label, then its content, as accname does for the node being named.
+          if (r === el) return cleanInline(el.getAttribute('aria-label') || '') || getVisibleLabelText(el);
+          return getVisibleLabelText(r) || r.textContent || '';
+        })
+        .join(' '),
+    );
+    if (t) return t;
+  }
+  return cleanInline(el.getAttribute('aria-label') || '') || cleanInline(el.getAttribute('title') || '');
+};
+
 export const getButtonLabel = (btn: Element): string =>
-  getVisibleLabelText(btn) || getButtonFallbackLabel(btn);
+  getVisibleLabelText(btn) || getAttributeName(btn) || getButtonFallbackLabel(btn);
 
 export const getButtonFallbackLabel = (btn: Element): string => {
   const t = getButtonText(btn);
@@ -417,6 +521,44 @@ export const isDropdownButton = (btn: Node | null | undefined): boolean => {
 // clicked (BL-24, D10).
 export const isClickableDropdownTrigger = (btn: Node | null | undefined): boolean =>
   isDropdownButton(btn) && (btn as Element).getAttribute('aria-haspopup') !== 'dialog';
+
+// --- Listboxes and ARIA headings (P2A-065, P2A-066) ---
+
+const firstRole = (el: Element): string =>
+  ((el.getAttribute('role') || '').trim().split(/\s+/)[0] || '').toLowerCase();
+
+// An option the listbox does not show: parked off the page (Search Console: y = -99818) or squeezed to no height
+// (its «Rows per page» options are 0 px tall; measured T276). Live layout only.
+const isParkedOption = (el: Element): boolean => {
+  if (!el.isConnected || el.ownerDocument !== document) return false;
+  const r = el.getBoundingClientRect();
+  return r.width <= 1 || r.height <= 1 || r.right + window.scrollX <= 0 || r.bottom + window.scrollY <= 0;
+};
+
+// A listbox that shows only its chosen option (a select-only combobox's list, a page-size picker) is written as its
+// value: every option used to print one per line, and which one was chosen was lost (P2A-065). aria-selected is
+// compared exactly, as Chrome reads it (E-853). null for any other listbox, which renders as before.
+export const getCollapsedListboxValue = (lb: Element): string | null => {
+  if (firstRole(lb) !== 'listbox') return null;
+  const opts = [...lb.querySelectorAll('[role="option"]')];
+  if (opts.length < 2) return null;
+  const sel = opts.filter((o) => o.getAttribute('aria-selected') === 'true');
+  if (!sel.length || !opts.some((o) => !sel.includes(o) && isParkedOption(o))) return null;
+  return cleanInline(sel.map((o) => getVisibleLabelText(o) || cleanInline(o.textContent || '')).join(', '));
+};
+
+export const getListboxMarker = (lb: Element, value: string): string => {
+  const name = getAttributeName(lb);
+  return name ? `[Listbox: ${name} | selected: ${value}]` : `[Listbox | selected: ${value}]`;
+};
+
+// `role="heading"` makes any element a heading; its level is aria-level, 2 when it has none (WAI-ARIA 1.2, heading).
+// 0 for anything else, and for h1-h6, which carry their own level (P2A-066).
+export const getAriaHeadingLevel = (el: Element): number => {
+  if (firstRole(el) !== 'heading' || /^H[1-6]$/.test(el.tagName)) return 0;
+  const n = parseInt(el.getAttribute('aria-level') || '', 10);
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 6) : 2;
+};
 
 export const isNavigationLikeButton = (btn: Node | null | undefined): boolean => {
   if (!btn || btn.nodeType !== Node.ELEMENT_NODE) return true;
@@ -612,6 +754,8 @@ export const collectAnchorText = (el: Element): string => {
   const parts: string[] = [];
   for (const c of el.childNodes) {
     if (c.nodeType === Node.TEXT_NODE) {
+      // An icon's glyph is not part of the link text: `home Overview` was printed for «Overview» (P2A-063).
+      if (isIconText(c)) continue;
       const t = cleanInline(c.textContent);
       if (t) parts.push(t);
     } else if (c.nodeType === Node.ELEMENT_NODE) {
@@ -621,6 +765,11 @@ export const collectAnchorText = (el: Element): string => {
       // A hidden part is not in the link's name: a `hidden` «(opens in new tab)» span, or a visibility:hidden
       // copy of the label that a tab keeps to reserve its bold width («Overview Overview», P2A-025).
       if (!isContentVisible(child)) continue;
+      if (isIconGlyphElement(child)) {
+        const nm = getIconOwnName(child);
+        if (nm) parts.push(nm);
+        continue;
+      }
       if (tag === 'IMG') {
         const alt = cleanInline(child.getAttribute('alt') || '');
         if (alt) parts.push(alt);

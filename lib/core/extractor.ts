@@ -251,9 +251,10 @@ export const buildFrontmatter = (
   const { config, state } = ctx;
   const title = cleanInline(document.title);
   const description = getMeta('meta[name="description"]');
-  const canonical = absUrl(
-    document.querySelector('link[rel="canonical"]')?.getAttribute('href') || '',
-  );
+  // Only what the page declares. absUrl('') is the page's own URL, which filled `canonical` with the address of
+  // every page that declares none (Search Console after in-app navigation, P2A-067); `source` holds that address.
+  const canonicalHref = document.querySelector('link[rel="canonical"]')?.getAttribute('href') || '';
+  const canonical = canonicalHref ? absUrl(canonicalHref) : '';
   const fm = [
     '---',
     `title: ${yq(title)}`,
