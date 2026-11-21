@@ -109,7 +109,7 @@ jobs:
 
       - name: Create GitHub Release
         # SHA-pinned to v3.0.2 (2026-07-13). Runtime bumped to Node 24 — matches our setup.
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3
         with:
           files: ${{ steps.zip.outputs.path }}
           generate_release_notes: true
