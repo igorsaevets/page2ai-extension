@@ -22,6 +22,8 @@ const DEFAULT_PORT = 3025;
 const PING_INTERVAL_MS = 20_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const HANDSHAKE_MS = 10_000;
+// Ids of the per-tab frame shim registrations (registerRafShim, P2A-084).
+const RAF_SHIM_PREFIX = 'p2a-bridge-raf-';
 // The retry that outlives the service worker: a setTimeout dies with it after
 // 30 s idle, so a server started later was reached only when some event woke
 // the worker. Chrome fires alarms at most every 30 s (unpacked: no limit).
@@ -515,14 +517,18 @@ export class BridgeClient {
     }
 
     let tabId: number;
+    // The tab stays in the background, where Chrome runs no animation frames (P2A-084).
+    const shim = await this.registerRafShim(req.url);
     try {
       const tab = await browser.tabs.create({ url: req.url, active: false });
       if (!tab?.id) {
+        void this.unregisterRafShim(shim);
         this.sendError(req.id, 'TAB_LOAD_FAILED', 'Tab has no ID');
         return;
       }
       tabId = tab.id;
     } catch (e) {
+      void this.unregisterRafShim(shim);
       this.sendError(req.id, 'TAB_LOAD_FAILED',
         `Failed to create tab: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -539,7 +545,12 @@ export class BridgeClient {
     this.pending.set(tabId, { requestId: req.id, tabId, url: req.url, run, timer });
 
     try {
-      await this.waitForTabLoad(tabId, timeoutMs);
+      try {
+        await this.waitForTabLoad(tabId, timeoutMs);
+      } finally {
+        // Loaded (or gave up): the document the shim was for has it by now.
+        void this.unregisterRafShim(shim);
+      }
       if (!this.pending.has(tabId)) return; // timed out while waiting
 
       // The browser has followed any redirect by now. Nothing runs in the page the
@@ -619,6 +630,45 @@ export class BridgeClient {
           e instanceof Error ? e.message : String(e));
       }
     }
+  }
+
+  // P2A-084: Chrome runs no requestAnimationFrame callbacks in a tab that is not
+  // shown, so a page that renders in rAF (Stencil before 4.44 hides its components
+  // until then) stays a shell in the bridge's background tab. entrypoints/bridge-raf.ts
+  // turns frame requests into 16 ms timers while the document is hidden. It is
+  // registered for the asked host only, just before the tab opens, and removed once
+  // the tab has loaded; a page that redirects to another host loads without it.
+  // Registrations a previous service worker left behind are removed first.
+  private readonly rafShims = new Set<string>();
+
+  private async registerRafShim(url: string): Promise<string | null> {
+    try {
+      const stale = (await browser.scripting.getRegisteredContentScripts())
+        .map((s) => s.id)
+        .filter((id) => id.startsWith(RAF_SHIM_PREFIX) && !this.rafShims.has(id));
+      if (stale.length) await browser.scripting.unregisterContentScripts({ ids: stale });
+      const { protocol, hostname } = new URL(url);
+      const id = `${RAF_SHIM_PREFIX}${crypto.randomUUID()}`;
+      await browser.scripting.registerContentScripts([{
+        id,
+        matches: [`${protocol}//${hostname}/*`],
+        js: ['bridge-raf.js'],
+        runAt: 'document_start',
+        world: 'MAIN',
+        allFrames: false,
+        persistAcrossSessions: false,
+      }]);
+      this.rafShims.add(id);
+      return id;
+    } catch {
+      return null; // no shim: the page is read as before
+    }
+  }
+
+  private async unregisterRafShim(id: string | null): Promise<void> {
+    if (!id) return;
+    this.rafShims.delete(id);
+    await browser.scripting.unregisterContentScripts({ ids: [id] }).catch(() => undefined);
   }
 
   private waitForTabLoad(tabId: number, timeoutMs: number): Promise<void> {

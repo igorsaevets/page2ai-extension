@@ -113,6 +113,18 @@ if (!chromePath) await setupFail('Chrome not found; set CHROME_PATH');
 const BLANK_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Blank</title></head><body></body></html>';
 const SLOW_HTML = TEST_HTML.replace('/img/bridge-diagram.png', '/img/slow.png');
 const SLOW_IMAGE_MS = 4000;
+// T288 (P2A-084): a page that draws its content in a requestAnimationFrame callback. Chrome runs no
+// frames in a tab that is not shown, and the bridge reads in a background tab: 1.7.2 gave the shell
+// (an Angular panel whose Stencil components render in frames). 1.7.3 registers a main-world shim
+// for the asked host while the tab loads (entrypoints/bridge-raf.ts).
+const RAF_MARKER = `raf-drawn-${Date.now().toString(36)}`;
+const RAF_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Drawn in a frame</title></head>
+<body><header>App shell</header><main id="app"></main><script>
+requestAnimationFrame(function () {
+  document.getElementById('app').innerHTML = '<h1>Dashboard</h1><p>Drawn in an animation frame. ${RAF_MARKER}</p>' +
+    '<p>A second paragraph, so the extractor has a body to keep.</p>';
+});
+</script></body></html>`;
 
 const hits = [];
 const server = createServer((req, res) => {
@@ -129,6 +141,7 @@ const server = createServer((req, res) => {
   res.setHeader('content-type', 'text/html; charset=utf-8');
   if (req.url === '/agent/blank') res.end(BLANK_HTML);
   else if (req.url === '/agent/slow') res.end(SLOW_HTML);
+  else if (req.url === '/agent/raf') res.end(RAF_HTML);
   else res.end(req.url?.startsWith('/private/') ? PRIVATE_HTML : TEST_HTML);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -497,6 +510,21 @@ try {
     check('a page with no text: the extension answers EXTRACTION_FAILED, not an empty page',
       browserHits('/agent/blank') > 0 && blankText.includes('EXTRACTION_FAILED') && blankText.includes('no text to extract'),
       blankText.slice(0, 200).replace(/\n/g, ' | '));
+
+    // T288 (P2A-084): content drawn in an animation frame comes through the background tab, and
+    // the shim's registration is gone once the tab has loaded.
+    const drawn = await rpc(20, 'tools/call', {
+      name: 'page_to_markdown',
+      arguments: { url: `${origin}/agent/raf`, timeout_ms: 15000 },
+    }, 60000);
+    const drawnText = (drawn?.result?.content ?? []).map((c) => c.text ?? '').join('\n');
+    check('a page drawn in requestAnimationFrame: the background tab gives its content (P2A-084)',
+      browserHits('/agent/raf') > 0 && drawnText.includes(RAF_MARKER),
+      drawnText.slice(0, 200).replace(/\n/g, ' | '));
+    const shimIds = await popup.evaluate(() => chrome.scripting.getRegisteredContentScripts()
+      .then((s) => s.map((x) => x.id))).catch((e) => [`error: ${e.message}`]);
+    check('no frame-shim registration is left after the reads', !shimIds.some((id) => id.startsWith('p2a-bridge-raf-')),
+      shimIds.join(', '));
 
     // T178: the user extracts a tab the bridge opened, from the popup, while its image holds the
     // load. The run is refused and the agent gets the bridge's own run, with its own options (no
