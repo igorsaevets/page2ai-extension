@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-11-21
+
+The Agent Bridge reads apps that draw their content in animation frames (P2A-084).
+
+### Fixed
+
+- **A page the Agent Bridge opens gets animation frames while its tab is in the background** (P2A-084). The bridge reads
+  in a tab it opens without showing it, and Chrome runs no `requestAnimationFrame` callbacks in a tab that is not shown,
+  so a renderer that draws in frames never finished there. Stencil before 4.44 is the measured case: it hides every
+  component until its first render (`visibility: hidden` until `.hydrated`) and renders in a frame-scheduled queue, so
+  an Angular control panel built on it came back as its shell, with the navigation empty, and its text shrank during the
+  wait (`client_render_chars: "4991 -> 152"`). The bridge now registers a small main-world script for the host it opens,
+  just before the tab opens, and removes it once the tab has loaded: while the document is hidden, a frame request
+  becomes a 16 ms timer, which is what Stencil 4.44 and later do themselves. Measured through the bridge in Chrome 158:
+  a page on Ionic 7.8.6's Stencil runtime gave 0 of 30 menu items and 0 of 6 table rows, now 30 and 6, the same as with
+  the tab in front; pages without frame-drawn content come out the same as before. The popup's own extraction runs in
+  the tab you are looking at and is unchanged. A page that redirects to another host loads without the script.
+
 ## [1.7.2] - 2026-11-20
 
 App interfaces such as Google Search Console come out without their interface noise (P2A-063..P2A-067, P2A-069).
