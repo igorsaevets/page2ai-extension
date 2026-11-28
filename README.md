@@ -2,41 +2,61 @@
 
 <img src="public/icon/128.png" width="96" height="96" alt="Page2AI">
 
-# Page2AI
+# Page2AI — Webpage to Markdown
 
-**Convert any webpage to clean, LLM-ready Markdown in one click.**
+**Convert any web page to clean, LLM-ready Markdown in one click.**
 
-Browser extension for Chrome and Firefox. Built for Claude, ChatGPT, Cursor, Obsidian, and RAG pipelines. 100% local. Open source. MIT.
+**English** · [简体中文](README.zh-CN.md)
+
+A free, open-source Chrome extension for ChatGPT, Claude, Gemini, DeepSeek, Cursor, Obsidian and RAG pipelines.
+It runs in your browser: no account, no server, no telemetry. MIT.
 
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dlpaaijcnbbmlfeohlphjpnbbcnomnno?logo=googlechrome&logoColor=white&label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)
-[![Firefox Add-ons](https://img.shields.io/amo/v/page2ai-webpage-to-markdown?logo=firefox&logoColor=white&label=Firefox%20Add-ons)](https://addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/)
 [![License MIT](https://img.shields.io/badge/License-MIT-4f46e5.svg)](LICENSE)
 [![Build](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml/badge.svg)](https://github.com/igorsaevets/page2ai-extension/actions/workflows/build.yml)
 [![GitHub stars](https://img.shields.io/github/stars/igorsaevets/page2ai-extension?style=social)](https://github.com/igorsaevets/page2ai-extension/stargazers)
 
-<br>
-
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)** — live since **2026-07-30** (v1.0.2, approved after a 9-day review).
-Prefer to verify before trusting a README? The same anonymous check this file carried while the
-listing was in review still works:
-
-```
-curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&acceptformat=crx2,crx3&x=id%3Ddlpaaijcnbbmlfeohlphjpnbbcnomnno%26uc'
-```
+**[Add to Chrome — free](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)** · [Docs](https://page2ai.net/) · [Online converter](https://page2ai.net/convert/) · [MCP server for AI agents](https://page2ai.net/mcp/)
 
 <br>
 
-<img src="assets/store/screenshot-1-uscis-eb1-1280x800.png" width="720" alt="Page2AI popup on the USCIS EB-1 policy manual, full body extracted">
+<img src="assets/store/screenshot-2-openwebui-tools-1280x800.png" width="720" alt="Page2AI popup on a documentation page: Extract Markdown, Copy, Download .md, and a Markdown preview with YAML frontmatter">
 
 </div>
 
 ---
 
+## What it is
+
+Page2AI is a browser extension that turns the page in your current tab into clean Markdown that a large language model can read: the article, its headings, lists, tables, links and code blocks, without the site's navigation, scripts and widgets. Press `Alt+Shift+M`, and the Markdown is on your clipboard, ready to paste into ChatGPT, Claude, Gemini, DeepSeek, Cursor or a RAG pipeline, or to save as a `.md` file.
+
+It converts the page as your browser shows it, so documentation behind a sign-in and pages built by JavaScript work too. It also keeps the code of every tab in tabbed code samples (Python, TypeScript, cURL), not only the visible one.
+
+## Quick facts
+
+<div itemscope itemtype="https://schema.org/SoftwareApplication">
+
+| | |
+|---|---|
+| Name | <span itemprop="name">Page2AI</span> (Chrome Web Store title: Page2AI — Webpage to Markdown) |
+| Type | <span itemprop="applicationCategory">Browser extension</span>, Manifest V3 |
+| Does | <span itemprop="description">Converts any web page to clean Markdown for LLMs, in the browser, in one click</span> |
+| Browsers | <span itemprop="operatingSystem">Chrome, Microsoft Edge, Brave, Arc, Vivaldi and other Chromium browsers</span> |
+| Price | Free, no paid tier, no account |
+| License | <a itemprop="license" href="LICENSE">MIT</a>, source in this repository |
+| Privacy | Runs locally; no analytics, no telemetry, no publisher server ([PRIVACY.md](PRIVACY.md)) |
+| Install | <a itemprop="installUrl" href="https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno">Chrome Web Store</a> (id `dlpaaijcnbbmlfeohlphjpnbbcnomnno`) or a [release zip](https://github.com/igorsaevets/page2ai-extension/releases) |
+| Website | <a itemprop="url" href="https://page2ai.net/">page2ai.net</a> |
+| Same converter for agents | MCP server [`page2ai-mcp`](https://github.com/igorsaevets/page2ai-mcp) and library [`@page2ai/core`](https://github.com/igorsaevets/page2ai-core) |
+| Author | <span itemprop="author">Igor Saevets</span> |
+
+</div>
+
 ## Works with
 
 Any tool that reads Markdown. That covers pretty much every LLM built for developers:
 
-- **LLMs**: Anthropic Claude, OpenAI GPT, Google Gemini, Meta Llama, xAI Grok, Mistral, Cohere
+- **LLMs**: Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek, Qwen, Meta Llama, xAI Grok, Mistral, Cohere
 - **AI IDEs**: Cursor, GitHub Copilot, Windsurf, Zed, Continue
 - **Notes**: Obsidian, Notion, Logseq, Roam, Reflect
 - **Frameworks**: LangChain, LlamaIndex, Vercel AI SDK, OpenAI Agents SDK, Anthropic MCP, Haystack
@@ -49,16 +69,13 @@ Page2AI grabs the actual content. It captures hidden tabs. It outputs Markdown w
 
 ## Install
 
-Works in Chrome, Firefox, Edge, Brave, Arc, Vivaldi, and other Chromium browsers. Every surface, step by step: [install guide](https://igorsaevets.github.io/page2ai-docs/install/).
+Works in Chrome, Edge, Brave, Arc, Vivaldi, and other Chromium browsers. Every surface, step by step: [install guide](https://page2ai.net/install/).
 
 ### Chrome Web Store (recommended)
 
-**[Page2AI on the Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)** —
-approved and live since **2026-07-30** (submitted 2026-07-21, a 9-day review). One click, and the
-browser keeps it updated.
+**[Page2AI on the Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno)**: one click, and the browser keeps it updated. Listed since 2026-07-30.
 
-While the listing was in review, this README refused to advertise it and published an anonymous
-check instead. The check stays, because a README should stay verifiable either way:
+To check what the store serves without trusting this README:
 
 ```bash
 ./scripts/is-published.sh
@@ -68,16 +85,12 @@ curl -s 'https://clients2.google.com/service/update2/crx?prodversion=140.0&accep
 
 `status="ok"` plus a version means it is live. `error-unknownApplication` means it is not.
 
-### Firefox Add-ons
-
-**[Page2AI on Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/)** —
-approved and public since **2026-07-31** (first listed version: v1.3.0). Works in Firefox, Firefox Developer Edition, and Firefox Nightly.
-
 ### Install from a release
 
 Every tagged version ships a signed-by-CI zip on the
 [releases page](https://github.com/igorsaevets/page2ai-extension/releases). Download it, unzip it,
 then `chrome://extensions` -> Developer mode -> Load unpacked -> select the unzipped folder.
+An extension loaded this way does not update itself: download the next release when it comes out.
 
 ### Build from source
 
@@ -90,26 +103,32 @@ npm run build
 # chrome://extensions -> Developer mode -> Load unpacked -> select .output\chrome-mv3\
 ```
 
+### Firefox
+
+An older version (1.5.1) is still listed on [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/page2ai-webpage-to-markdown/), but Firefox is no longer supported and that listing gets no updates. Every release goes to the Chrome Web Store.
+
 ## Usage
 
 1. Open any webpage. Documentation, blog post, research paper, product page.
 2. Hit `Alt+Shift+M` or click the toolbar icon.
-3. Click **Extract**, or leave the profile on **Auto** (recommended).
-4. Markdown lands in your clipboard. Paste it into Claude, ChatGPT, Cursor, or your RAG pipeline.
+3. Click **Extract Markdown**, or leave the profile on **Auto-detect** (recommended).
+4. Markdown lands in your clipboard. Paste it into Claude, ChatGPT, Cursor, or your RAG pipeline. **Download .md** saves it as a file.
 
 Progress log runs live in the popup. If you close the popup mid-extraction, the badge shows a checkmark when the result is ready. Reopen it to recover.
 
 ## Screenshots
 
-A capture generated by running the built extension against the live site (see `scripts/gen-screenshots-real.mjs`) — the popup values (profile, chars, tabs, ratio) are what the extension actually returned on that page, not mockup numbers.
+Captures generated by running the built extension against live sites (see `scripts/gen-screenshots-real.mjs`): the popup values (profile, size, tabs, ratio) are what the extension actually returned on that page, not mockup numbers.
 
-**Government long-form** — USCIS EB-1 policy manual. Regulatory PDFs and long-form pages break most extractors because the primary content sits inside deep card grids. Page2AI's article-detection heuristic finds the real body, drops the boilerplate.
+**Documentation** (above): the Open WebUI docs, with the Markdown preview and its YAML frontmatter.
 
-<img src="assets/store/screenshot-1-uscis-eb1-1280x800.png" width="720" alt="Page2AI popup on USCIS EB-1 policy manual showing full body extraction">
+**Government long-form**: a US government policy manual. Long-form pages break most extractors because the primary content sits inside deep card grids. Page2AI's article-detection heuristic finds the real body, drops the boilerplate.
+
+<img src="assets/store/screenshot-1-uscis-eb1-1280x800.png" width="720" alt="Page2AI popup on a long government policy manual page showing full body extraction">
 
 ## For AI Agents (MCP Server)
 
-The Page2AI converter is also available as an [MCP server](https://modelcontextprotocol.io) for AI coding assistants: your agent reads public web pages as clean Markdown. The server fetches without cookies and runs no page scripts, so on a page behind a sign-in or one built by JavaScript its output differs from the extension's; an agent that already has the page's HTML can pass it as `html` instead. With the extension's Agent Bridge on (1.6.0; the stores still serve 1.5.1 without it), the server can instead ask your browser for such a page — see **Agent Bridge** under Features.
+The Page2AI converter is also available as an [MCP server](https://modelcontextprotocol.io) for AI coding assistants: your agent reads public web pages as clean Markdown. The server fetches without cookies and runs no page scripts, so on a page behind a sign-in or one built by JavaScript its output differs from the extension's; an agent that already has the page's HTML can pass it as `html` instead. With the extension's Agent Bridge on (since 1.6.0), the server can instead ask your browser for such a page — see **Agent Bridge** under Features.
 
 **Local (recommended):** add this to your MCP client config, or run `claude mcp add page2ai -- npx -y page2ai-mcp` in Claude Code:
 
@@ -117,7 +136,7 @@ The Page2AI converter is also available as an [MCP server](https://modelcontextp
 { "mcpServers": { "page2ai": { "command": "npx", "args": ["-y", "page2ai-mcp"] } } }
 ```
 
-Your machine, no cloud, Node.js 20 or later. Every client: [MCP server docs](https://igorsaevets.github.io/page2ai-docs/mcp/).
+Your machine, no cloud, Node.js 20 or later. Every client: [MCP server docs](https://page2ai.net/mcp/).
 
 **Hosted (zero install):**
 
@@ -125,7 +144,7 @@ Your machine, no cloud, Node.js 20 or later. Every client: [MCP server docs](htt
 https://page2ai.igorsaevets.com/api/mcp
 ```
 
-Point any MCP client that takes a server URL at it: public pages only, `url` and `query` only, at most 60 s per page. The [Page2AI plugin in ChatGPT](https://igorsaevets.github.io/page2ai-docs/install/#chatgpt-plugin) still calls the earlier address, `https://page2ai-mcp-remote.vercel.app/api/mcp`, which keeps answering (at most 20 s per page there).
+Point any MCP client that takes a server URL at it: public pages only, `url` and `query` only, at most 60 s per page. The [Page2AI plugin in ChatGPT](https://page2ai.net/install/#chatgpt-plugin) still calls the earlier address, `https://page2ai-mcp-remote.vercel.app/api/mcp`, which keeps answering (at most 20 s per page there).
 
 **Core library** for custom pipelines:
 
@@ -150,7 +169,7 @@ Source and docs: [page2ai-mcp](https://github.com/igorsaevets/page2ai-mcp) | [pa
 | 100% local, zero telemetry | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Minimum permissions (no site access at install; optional access only for the Agent Bridge) | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-Longer reads: [Webpage to Markdown Chrome extension: 6 options compared](https://igorsaevets.github.io/page2ai-docs/webpage-to-markdown-chrome-extension/) · [how Page2AI compares to other converters](https://igorsaevets.github.io/page2ai-docs/comparison/).
+Longer reads: [Webpage to Markdown Chrome extension: 6 options compared](https://page2ai.net/webpage-to-markdown-chrome-extension/) · [how Page2AI compares to other converters](https://page2ai.net/comparison/).
 
 ## Features
 
@@ -174,7 +193,7 @@ Longer reads: [Webpage to Markdown Chrome extension: 6 options compared](https:/
 
 **Appendix masking (opt-in).** Inside the framework-state appendix (a page's embedded app state, such as `__NEXT_DATA__`), values matching email, phone, token and API-key patterns — and any field whose name marks it as a credential, an email, a phone or an SSN — are replaced with placeholders. There is no pattern for an SSN written out as a value, and the page's visible text is never rewritten: this keeps secrets out of the appendix, it does not anonymize a page.
 
-**Agent Bridge (1.6.0, opt-in, off by default).** Turn its switch on in the popup and Page2AI connects to the Page2AI MCP server on your own machine (`ws://127.0.0.1:3025`), paired by a random key you paste into the server. An agent can then ask your browser for pages behind your sign-in or rendered by JavaScript; the extension opens them in background tabs and returns the same Markdown the popup makes. Turning the switch off disconnects and gives back the site access it asked for. The stores still serve 1.5.1, which has no bridge; see [PRIVACY.md](PRIVACY.md), "The Agent Bridge".
+**Agent Bridge (since 1.6.0, opt-in, off by default).** Turn its switch on in the popup and Page2AI connects to the Page2AI MCP server on your own machine (`ws://127.0.0.1:3025`), paired by a random key you paste into the server. An agent can then ask your browser for pages behind your sign-in or rendered by JavaScript; the extension opens them in background tabs and returns the same Markdown the popup makes. Turning the switch off disconnects and gives back the site access it asked for. See [PRIVACY.md](PRIVACY.md), "The Agent Bridge".
 
 **One hotkey.** `Alt+Shift+M` opens the popup. Enter runs extraction.
 
@@ -187,7 +206,7 @@ Page2AI does not send data to the publisher or to any third party.
 - Stored on your device only: your preferences, the bridge switch and its pairing key (`chrome.storage.local`), and the current tab's last result (`chrome.storage.session`, cleared when the browser closes). Bridge results are not cached.
 - By itself, the extension reads only the page you explicitly acted on (`activeTab` gesture). The one opt-in exception: with the Agent Bridge switch on, it opens pages your own local MCP server names in background tabs and sends their Markdown to that process on your own machine — never to the publisher.
 
-Full details in [PRIVACY.md](PRIVACY.md) and the [privacy policy](https://igorsaevets.github.io/page2ai-docs/privacy/).
+Full details in [PRIVACY.md](PRIVACY.md) and the [privacy policy](https://page2ai.net/privacy/).
 
 ## Permissions
 
@@ -201,6 +220,40 @@ Full details in [PRIVACY.md](PRIVACY.md) and the [privacy policy](https://igorsa
 
 No `host_permissions` in the package, and no `<all_urls>` at install: Page2AI cannot read any site until you act. Turning the Agent Bridge on asks for optional site access (`http://*/*`, `https://*/*`) for its background tabs, and turning it off removes that access; your own extractions keep working through `activeTab` either way.
 
+## FAQ
+
+### How do I convert a web page to Markdown for ChatGPT or Claude?
+
+Install Page2AI from the [Chrome Web Store](https://chromewebstore.google.com/detail/dlpaaijcnbbmlfeohlphjpnbbcnomnno), open the page, press `Alt+Shift+M` (or click the toolbar icon) and click **Extract Markdown**. The Markdown is copied to your clipboard; paste it into the chat. **Download .md** saves it as a file instead.
+
+### Is Page2AI free?
+
+Yes. It is free and open source under the MIT license, with no paid tier and no account. The whole source is in this repository.
+
+### Does it send the page or my data anywhere?
+
+No. The conversion runs inside your browser, the extension has no server of its own and no analytics, and it reads only the tab you invoked it on. The one exception is opt-in: with the Agent Bridge switch on, it sends Markdown to the Page2AI MCP server on your own machine.
+
+### Does it work on pages behind a login, or on pages built by JavaScript?
+
+Yes. Page2AI converts the page as your browser shows it, so pages you are signed in to and single-page apps work; it waits for client-rendered content to appear before converting. Server-side converters (Jina Reader, Firecrawl and similar) fetch the URL from a server, not from your browser, so a page behind your sign-in needs your cookies sent along.
+
+### Does it keep code blocks, tables and tabbed code samples?
+
+Yes. Code blocks keep their lines and, when the page marks it, their language; tables keep their structure (merged header cells included), and in tabbed code samples the code of every tab is kept, not only the visible one.
+
+### Does it use the site's llms.txt or a Markdown copy of the page?
+
+No. It converts the page in your tab and nothing else, because a site's `llms.txt` or `.md` copy can be older than the page you are reading.
+
+### Can my AI agent use the same converter?
+
+Yes. Run the MCP server locally (`npx -y page2ai-mcp`, or `claude mcp add page2ai -- npx -y page2ai-mcp` in Claude Code), or point an MCP client at the hosted endpoint `https://page2ai.igorsaevets.com/api/mcp`. See [For AI Agents](#for-ai-agents-mcp-server).
+
+### Which browsers does it support?
+
+Chrome, Microsoft Edge, Brave, Arc, Vivaldi and other Chromium browsers. Firefox is no longer supported.
+
 ## Ecosystem
 
 Page2AI runs on and interoperates with open technical standards from the US AI developer ecosystem:
@@ -211,7 +264,6 @@ Page2AI runs on and interoperates with open technical standards from the US AI d
 - **JSON-LD** (W3C standard). Surfaced in the frontmatter for schema-aware RAG pipelines.
 - **[Model Context Protocol](https://modelcontextprotocol.io)** (Anthropic). AI agent integration via MCP server.
 - **Chrome Web Store** (Google). Distribution for Chromium browsers with automated review and updates.
-- **Firefox Add-ons** (Mozilla). Distribution for Firefox with automated review.
 - **GitHub** (Microsoft). Code hosting, CI/CD, release automation.
 
 Downstream consumers of Page2AI Markdown include US-based AI platforms (Anthropic Claude, OpenAI GPT, Google Gemini, Meta Llama, xAI Grok) and AI-native developer tools (Cursor, GitHub Copilot, Windsurf, Vercel AI SDK, LangChain, LlamaIndex).
@@ -252,7 +304,7 @@ npm run icons        # Regenerate PNG icons from SVG sources
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for every release. The stores carry the latest tagged one: `./scripts/is-published.sh` prints the version the Chrome Web Store serves.
+See [CHANGELOG.md](CHANGELOG.md) for every release. The store carries the latest tagged one: `./scripts/is-published.sh` prints the version the Chrome Web Store serves.
 
 ## Credits
 
