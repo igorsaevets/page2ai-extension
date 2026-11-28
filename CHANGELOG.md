@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.6] - 2026-11-28
+
+The tab-panel dedupe no longer cuts code blocks (P2A-102).
+
+### Fixed
+
+- **A code block is taken out whole or left whole by the tab-panel dedupe** (P2A-102). The extension writes every tab
+  panel under its tab button, and the main flow can hold the same content again (when the capture could not name the
+  panel's element, or when the page shows the same code twice). A pass removes that repeat, but it compared lines one
+  by one, code and fence lines like prose: any run of three or more lines that a panel also had gave way to a comment.
+  A block that ended like a panel's block (a Vercel code group, whose tabs all end in `  },` / `};`) lost its last
+  lines and its closing fence, one that began like it lost its opening fence, a whole duplicate with a blank line in it
+  lost the part before that line, and lines shared in the middle were cut out with the comment left inside the code.
+  A Markdown reader then took the rest of the page for code, or read code with lines missing. A code block is now one
+  unit: it gives way, fences included, only when its lines are those of one of the panels' code blocks (each line
+  trimmed, blank lines aside, in order); otherwise it stays as written, and no run of prose lines reaches into it. A
+  panel marker inside code is code, and a block that sat on a list item's marker line or in a quote leaves the
+  comment behind that marker.
+
+Measured on 315 saved pages (the T276 corpus, the Starlight sample, the T287 live sample), 18 of them with tab panels:
+1.7.5 wrote the dedupe comment 12 times on 5 pages, 11 of them inside a code block (one only because an earlier cut on
+its page had left a fence open); the twelfth replaced a field's own example on an API reference (docs.tavily.com)
+because its four lines also occur in a larger response sample. 1.7.6 writes it once, for the one block that repeats a
+panel's block whole (vercel.com). On those 5 pages 8 code blocks
+changed, 6 of them are now exactly Chrome's copy (1.7.5: none) and the other 2 (clerk.com) have no copy on the page to
+compare with; on vercel.com the fence closes again, so the 151 lines after it read as prose. 305 pages are unchanged;
+the other 5 changed pages have no tab panel, and their 1.7.6 output equals 1.7.5's in a second run (page load timing).
+A control run of 1.7.5 against itself changed 2 pages, none in code. The 45 synthetic code blocks still come out as
+Chrome copies them, and the tab-panel end-to-end checks pass (63 of 63).
+
 ## [1.7.5] - 2026-11-28
 
 Code in list items and quotes keeps its lines and indentation (P2A-101).

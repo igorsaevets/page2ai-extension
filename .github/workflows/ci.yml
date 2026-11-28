@@ -43,6 +43,10 @@ jobs:
       - name: Code fences in lists and quotes unit test
         run: node scripts/md-fences.test.mjs
 
+      # The tab-panel dedupe takes a code block whole or not at all, so no block loses a fence (P2A-102).
+      - name: Tab panel dedupe unit test
+        run: node scripts/md-tabpanels.test.mjs
+
       # The same for lib/agent-bridge.ts, against a fake browser: which page the extractor may go into (T176).
       - name: Agent Bridge page-check unit test
         run: node scripts/agent-bridge.test.mjs
