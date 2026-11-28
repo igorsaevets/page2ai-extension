@@ -484,31 +484,66 @@ export const dedupeRepeatedBlocks = (text: string): string => {
   return out.join('\n');
 };
 
-// Remove tab panel content that also appears in the main flow.
+// Remove main-flow content that a captured tab panel already carries. The panel is exported under its tab button; when
+// the capture could not name the panel's element (a content-delta capture), or the page repeats a panel's code
+// elsewhere, the main flow writes it a second time. A run of three or more prose lines that are all lines of one panel
+// gives way to a comment. A code block is one unit (P2A-102): it gives way, fences included, only when its lines are
+// one of the panels' code blocks (each line trimmed, blank lines aside, in order), else it stays as written, and no
+// prose run reaches into it. Until 1.7.5 the pass matched code lines one by one like prose: a block that shared its last
+// lines with a panel (a Vercel code group) lost them with its closing fence, a whole duplicate with a blank line in it
+// lost its opening fence, and either way a Markdown reader took the rest of the page for code. A panel marker inside
+// code is code. The comment keeps the container prefix of the block's opening fence (`1. `, `> `, an indent), so a
+// list item or a quote that held the block keeps its place.
+const TAB_PANEL_START_RE = /<!-- AI: TAB PANEL START:/;
+const TAB_PANEL_END_RE = /<!-- AI: TAB PANEL END:/;
+const TAB_PANEL_DEDUP_COMMENT = '<!-- AI: TAB PANEL CONTENT ALREADY EXPORTED ABOVE (deduplicated) -->';
+
 export const dedupeTabPanelDuplicates = (text: string): string => {
   const lines = String(text || '').split('\n');
   const normForDedup = (s: string): string =>
     s.trim().replace(/^#{1,6}\s+/, '').replace(/^[-*+]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+  const blockKey = (body: string[]): string =>
+    body
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join('\n');
 
   const panelTexts: Array<Set<string>> = [];
+  const panelBlocks = new Set<string>();
   let inPanel = false;
   let panelLines: string[] = [];
+  let body: string[] | null = null;
+  const scan = createFenceTracker();
 
   for (const line of lines) {
-    if (/<!-- AI: TAB PANEL START:/.test(line)) {
-      inPanel = true;
-      panelLines = [];
-      continue;
-    }
-    if (/<!-- AI: TAB PANEL END:/.test(line)) {
-      if (panelLines.length) {
-        const normalized = panelLines.map((l) => normForDedup(l)).filter(Boolean);
-        if (normalized.length >= 1) panelTexts.push(new Set(normalized));
+    const wasCode = scan.inFence;
+    const isFence = scan.check(line.trim());
+    if (!wasCode && !isFence) {
+      if (TAB_PANEL_START_RE.test(line)) {
+        inPanel = true;
+        panelLines = [];
+        continue;
       }
-      inPanel = false;
-      continue;
+      if (TAB_PANEL_END_RE.test(line)) {
+        if (panelLines.length) {
+          const normalized = panelLines.map((l) => normForDedup(l)).filter(Boolean);
+          if (normalized.length >= 1) panelTexts.push(new Set(normalized));
+        }
+        inPanel = false;
+        continue;
+      }
     }
-    if (inPanel) panelLines.push(line);
+    if (!inPanel) continue;
+    panelLines.push(line);
+    if (!wasCode) {
+      if (isFence) body = [];
+    } else if (scan.inFence) {
+      body?.push(line);
+    } else {
+      const key = body ? blockKey(body) : '';
+      if (key) panelBlocks.add(key);
+      body = null;
+    }
   }
 
   if (!panelTexts.length) return text;
@@ -517,10 +552,12 @@ export const dedupeTabPanelDuplicates = (text: string): string => {
   inPanel = false;
   let matchBuffer: string[] = [];
   let matchedPanelIdx = -1;
+  let block: string[] | null = null;
+  const fence = createFenceTracker();
 
   const flushMatch = () => {
     if (matchBuffer.length >= 3 && matchedPanelIdx >= 0) {
-      out.push('<!-- AI: TAB PANEL CONTENT ALREADY EXPORTED ABOVE (deduplicated) -->');
+      out.push(TAB_PANEL_DEDUP_COMMENT);
     } else {
       matchBuffer.forEach((l) => out.push(l));
     }
@@ -528,14 +565,25 @@ export const dedupeTabPanelDuplicates = (text: string): string => {
     matchedPanelIdx = -1;
   };
 
+  const closeBlock = (blk: string[]) => {
+    const open = blk[0]!;
+    const m = panelBlocks.has(blockKey(blk.slice(1, -1))) ? FENCE_LINE_RE.exec(open) : null;
+    if (m) out.push(open.slice(0, open.length - m[1]!.length - m[2]!.length) + TAB_PANEL_DEDUP_COMMENT);
+    else blk.forEach((l) => out.push(l));
+  };
+
   for (const line of lines) {
-    if (/<!-- AI: TAB PANEL START:/.test(line)) {
+    const trimmed = line.trim();
+    const wasCode = fence.inFence;
+    const isFence = fence.check(trimmed);
+    const code = wasCode || isFence;
+    if (!code && TAB_PANEL_START_RE.test(line)) {
       flushMatch();
       inPanel = true;
       out.push(line);
       continue;
     }
-    if (/<!-- AI: TAB PANEL END:/.test(line)) {
+    if (!code && TAB_PANEL_END_RE.test(line)) {
       inPanel = false;
       out.push(line);
       continue;
@@ -544,8 +592,23 @@ export const dedupeTabPanelDuplicates = (text: string): string => {
       out.push(line);
       continue;
     }
+    if (code) {
+      if (!wasCode) {
+        // A main-flow block opens: the prose run before it ends here, and the block is judged whole when it closes.
+        flushMatch();
+        block = [line];
+      } else if (block) {
+        block.push(line);
+        if (!fence.inFence) {
+          closeBlock(block);
+          block = null;
+        }
+      } else {
+        out.push(line);
+      }
+      continue;
+    }
 
-    const trimmed = line.trim();
     if (!trimmed) {
       flushMatch();
       out.push(line);
@@ -577,6 +640,8 @@ export const dedupeTabPanelDuplicates = (text: string): string => {
   }
 
   flushMatch();
+  // A block the page never closes stays as written.
+  if (block) block.forEach((l) => out.push(l));
   return out.join('\n');
 };
 
