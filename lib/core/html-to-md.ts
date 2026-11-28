@@ -391,11 +391,13 @@ const emitListItem = (
       out.push(`${pfx}${marker} ${marker === '-' && /^-{3,}$/.test(first) ? '***' : first}`);
       markerAt = out.length - 1;
       const ind = s.kind === 'block' ? exact : cont;
-      for (const l of lines.slice(1)) out.push(l.trim() ? ind + l : '');
+      // An empty line stays empty; a line made of spaces is indented like the others, so a code line of spaces keeps
+      // them (P2A-101); outside code the post-processing turns it into an empty line.
+      for (const l of lines.slice(1)) out.push(l ? ind + l : '');
       continue;
     }
     if (out.length && out[out.length - 1] !== '') out.push('');
-    for (const l of lines) out.push(l.trim() ? cont + l : '');
+    for (const l of lines) out.push(l ? cont + l : '');
   }
   return { lines: out, markerAt };
 };

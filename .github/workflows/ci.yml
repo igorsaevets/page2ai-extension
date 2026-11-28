@@ -39,6 +39,10 @@ jobs:
       - name: Markdown post-processing unit test
         run: node scripts/md-postprocess.test.mjs
 
+      # Every pass leaves code alone wherever its fence stands: behind a list marker or a quote's `>` (P2A-101).
+      - name: Code fences in lists and quotes unit test
+        run: node scripts/md-fences.test.mjs
+
       # The same for lib/agent-bridge.ts, against a fake browser: which page the extractor may go into (T176).
       - name: Agent Bridge page-check unit test
         run: node scripts/agent-bridge.test.mjs
