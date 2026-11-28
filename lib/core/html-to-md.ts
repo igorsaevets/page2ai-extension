@@ -701,44 +701,126 @@ const extractNearbyMeta = (pre: Element): CodeBlockMeta => {
   return { lang, title };
 };
 
+// --- Code block text (P2A-093) ---
+//
+// The text of a code block is the text Chrome copies from it: Ctrl+C and Selection.toString() both run Blink's
+// TextIterator with unselectable content skipped. A line starts and ends at an element laid out as a block (its
+// computed display, not floated or absolutely positioned), a <p> leaves a blank line after it, a <br> breaks the line,
+// a table cell is followed by a tab, and text that is not displayed, is visibility: hidden or user-select: none (a
+// line-number gutter) is left out. A block boundary adds a line break only where the text does not already stand at the
+// start of a line. Expressive Code, the code blocks of every Starlight site, writes each line as a <div> and no newline
+// character, and a blank line as <div>\n</div>, which innerText reads as two blank lines and Chrome copies as one.
+// Until 1.7.3 the text was the candidate (`.line` spans, textContent, innerText) with the most leading indentation and,
+// on a tie, textContent, so a block whose lines were not indented came out as one line (P2A-093; T305 measured 30
+// layouts against Chrome's copy text: this walk matched 30, @page2ai/core's tag rule 21, 1.7.3 9, innerText 19).
+// A block that is not rendered (a hidden ancestor, a closed tab panel) has no layout to read: there the walk goes by
+// tags instead, a block tag starting a line and a <p> standing apart by a blank line, which is @page2ai/core's codeText
+// rule (0.4.27, P2A-092), so both products give such a block the same lines.
+const CODE_LINE_TAGS = new Set([
+  'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DETAILS', 'DIALOG', 'DIV', 'DL', 'DT', 'FIELDSET', 'FIGCAPTION',
+  'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'PRE',
+  'SECTION', 'SUMMARY', 'TABLE', 'TBODY', 'TFOOT', 'THEAD', 'TR', 'UL',
+]);
+const CODE_SKIP_TAGS = new Set([
+  'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'CANVAS', 'SELECT', 'DATALIST', 'TEXTAREA', 'IFRAME', 'OBJECT',
+  'EMBED', 'AUDIO', 'VIDEO',
+]);
+
+const walkCodeText = (root: Element, layout: boolean): string => {
+  let s = '';
+  // Line breaks the block boundaries met since the last text ask for: 1 starts a line, 2 leaves a blank line. None is
+  // written before the first text or after the last.
+  let want = 0;
+  const put = (t: string): void => {
+    if (!t) return;
+    if (want && s) {
+      let have = 0;
+      for (let end = s.length; have < want && s.charCodeAt(end - 1) === 10; end--) have++;
+      if (want > have) s += '\n'.repeat(want - have);
+    }
+    want = 0;
+    s += t;
+  };
+  const walk = (n: Node, copied: boolean): void => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      if (copied) put((n as Text).data);
+      return;
+    }
+    if (n.nodeType !== Node.ELEMENT_NODE) return;
+    const e = n as Element;
+    const tag = e.tagName.toUpperCase();
+    if (CODE_SKIP_TAGS.has(tag)) return;
+    let before = 0;
+    let after = 0;
+    let cell = false;
+    let own = copied;
+    if (layout) {
+      const cs = getCachedComputedStyle(e);
+      const d = cs.display;
+      if (d === 'none') return;
+      own = cs.visibility === 'visible' && (cs.userSelect || cs.webkitUserSelect) !== 'none';
+      if (tag === 'BR') {
+        if (own) put('\n');
+        return;
+      }
+      cell = d === 'table-cell';
+      const block = d !== 'contents' && !d.startsWith('inline') && !d.startsWith('ruby') && !cell &&
+        cs.float === 'none' && cs.position !== 'absolute' && cs.position !== 'fixed';
+      if (block) {
+        before = 1;
+        after = tag === 'P' ? 2 : 1;
+      }
+    } else {
+      if (e.hasAttribute('hidden') || (tag === 'DIALOG' && !e.hasAttribute('open'))) return;
+      if (tag === 'BR') {
+        put('\n');
+        return;
+      }
+      cell = tag === 'TD' || tag === 'TH';
+      before = after = tag === 'P' ? 2 : CODE_LINE_TAGS.has(tag) ? 1 : 0;
+    }
+    want = Math.max(want, before);
+    for (const c of e.childNodes) walk(c, own);
+    want = Math.max(want, after);
+    // A cell is followed by a tab, unless a block inside it ended the line: Chrome copies
+    // `<td><div>a</div></td><td>b</td>` as "a\nb".
+    const next = e.nextElementSibling;
+    if (cell && next && !want) {
+      const nextCell = layout ? getCachedComputedStyle(next).display === 'table-cell' : /^T[DH]$/.test(next.tagName.toUpperCase());
+      if (nextCell) put('\t');
+    }
+  };
+  let rootCopied = true;
+  if (layout) {
+    // Visibility and user-select inherit, so the block's own computed values hold what its ancestors set.
+    const cs = getCachedComputedStyle(root);
+    rootCopied = cs.visibility === 'visible' && (cs.userSelect || cs.webkitUserSelect) !== 'none';
+  }
+  for (const c of root.childNodes) walk(c, rootCopied);
+  return s;
+};
+
+// The block's text as Chrome copies it; by tags when the block is not rendered, and by tags as well when the layout
+// leaves nothing (every line user-select: none or visibility: hidden) while the block holds text: a code block is
+// never printed empty.
+export const codeBlockText = (el: Element): string => {
+  const layout = el.getClientRects().length > 0;
+  const text = walkCodeText(el, layout);
+  return layout && !text.trim() ? walkCodeText(el, false) : text;
+};
+
 // --- Code block rendering (Section 30) ---
 
 export const renderCodeBlock = (ctx: ExtractContext, el: Element): string[] => {
   const codeEl = el.querySelector('code') || el;
-  const extractShiki = (): string => {
-    const ls = [...codeEl.querySelectorAll(':scope > .line, .line')].filter(
-      (l) => !l.classList.contains('line-number') && !l.classList.contains('ln'),
-    );
-    if (!ls.length) return '';
-    return ls
-      .map((l) => String(l.textContent || '').replace(/\u00a0/g, ' ').replace(/\r/g, ''))
-      .join('\n');
-  };
-  const extractFallback = (): string => {
-    const cs = [
-      extractShiki(),
-      codeEl.textContent,
-      el.textContent,
-      (codeEl as HTMLElement).innerText,
-      (el as HTMLElement).innerText,
-    ]
-      .map((v) => stripOuterBlankLines(v || ''))
-      .filter((v) => v && v.trim());
-    if (!cs.length) return '';
-    const si = (t: string): number =>
-      t.split('\n').reduce((s, l) => {
-        const m = l.match(/^[ \t]+/);
-        return s + (m ? m[0].length : 0);
-      }, 0);
-    return cs.sort((a, b) => si(b) - si(a))[0]!;
-  };
   const normCode = (t: string): string => {
     const ls = String(t || '').replace(/\u00a0/g, ' ').replace(/\r/g, '').split('\n');
     while (ls.length && ls[0]!.trim() === '') ls.shift();
     while (ls.length && ls[ls.length - 1]!.trim() === '') ls.pop();
     return ls.join('\n');
   };
-  const text = normCode(extractFallback());
+  // The <code> inside the <pre> when there is one (the element @page2ai/core reads too), else the <pre>.
+  const text = normCode(codeBlockText(codeEl));
   if (!text.trim()) return [];
 
   const meta = extractNearbyMeta(el);

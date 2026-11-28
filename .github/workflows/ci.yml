@@ -151,6 +151,12 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: xvfb-run -a node .e2e/e2e-dashboard-noise.mjs
+      # P2A-093: a code block's text is the text Chrome copies from it: Expressive Code lines (Starlight), <br> lines,
+      # spans laid out as blocks, a user-select: none gutter, a block with no layout; newline and Shiki blocks as the control.
+      - name: Code-blocks suite (agent script)
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: xvfb-run -a node .e2e/e2e-code-blocks.mjs
       - name: Tab-panels suite, run by the agent script (never-click list in the main world)
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
