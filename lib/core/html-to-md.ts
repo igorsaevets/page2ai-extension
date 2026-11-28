@@ -741,9 +741,12 @@ const walkCodeText = (root: Element, layout: boolean): string => {
     want = 0;
     s += t;
   };
-  const walk = (n: Node, copied: boolean): void => {
+  const walk = (n: Node, copied: boolean, boxless = false): void => {
     if (n.nodeType === Node.TEXT_NODE) {
-      if (copied) put((n as Text).data);
+      // A flex, grid or table container renders no whitespace-only text between its items: rehype-pretty-code and
+      // other Shiki setups make <code> a grid of line spans with a newline character between them, which Chrome does
+      // not copy (T305: a blank line after every line of two blocks on the T287 sample until this check).
+      if (copied && !(boxless && !/\S/.test((n as Text).data))) put((n as Text).data);
       return;
     }
     if (n.nodeType !== Node.ELEMENT_NODE) return;
@@ -754,10 +757,12 @@ const walkCodeText = (root: Element, layout: boolean): string => {
     let after = 0;
     let cell = false;
     let own = copied;
+    let itemsOnly = false;
     if (layout) {
       const cs = getCachedComputedStyle(e);
       const d = cs.display;
       if (d === 'none') return;
+      itemsOnly = /^(?:inline-)?(?:flex|grid|table)$|^table-(?:row|row-group|header-group|footer-group)$/.test(d);
       own = cs.visibility === 'visible' && (cs.userSelect || cs.webkitUserSelect) !== 'none';
       if (tag === 'BR') {
         if (own) put('\n');
@@ -780,7 +785,7 @@ const walkCodeText = (root: Element, layout: boolean): string => {
       before = after = tag === 'P' ? 2 : CODE_LINE_TAGS.has(tag) ? 1 : 0;
     }
     want = Math.max(want, before);
-    for (const c of e.childNodes) walk(c, own);
+    for (const c of e.childNodes) walk(c, own, itemsOnly);
     want = Math.max(want, after);
     // A cell is followed by a tab, unless a block inside it ended the line: Chrome copies
     // `<td><div>a</div></td><td>b</td>` as "a\nb".
@@ -791,12 +796,14 @@ const walkCodeText = (root: Element, layout: boolean): string => {
     }
   };
   let rootCopied = true;
+  let rootItemsOnly = false;
   if (layout) {
     // Visibility and user-select inherit, so the block's own computed values hold what its ancestors set.
     const cs = getCachedComputedStyle(root);
     rootCopied = cs.visibility === 'visible' && (cs.userSelect || cs.webkitUserSelect) !== 'none';
+    rootItemsOnly = /^(?:inline-)?(?:flex|grid|table)$|^table-(?:row|row-group|header-group|footer-group)$/.test(cs.display);
   }
-  for (const c of root.childNodes) walk(c, rootCopied);
+  for (const c of root.childNodes) walk(c, rootCopied, rootItemsOnly);
   return s;
 };
 
