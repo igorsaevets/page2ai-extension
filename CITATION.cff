@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use Page2AI in your work, please cite it as below."
+title: "Page2AI — Webpage to Markdown (browser extension)"
+abstract: >-
+  A free, open-source Chrome extension (Manifest V3) that converts the web page
+  in the current tab into clean Markdown for large language models, in the
+  browser, with no server and no telemetry.
+type: software
+license: MIT
+repository-code: "https://github.com/igorsaevets/page2ai-extension"
+url: "https://page2ai.net/"
+authors:
+  - given-names: Igor
+    family-names: Saevets
+    orcid: "https://orcid.org/0009-0006-8636-1377"
+keywords:
+  - webpage-to-markdown
+  - html-to-markdown
+  - chrome-extension
+  - browser-extension
+  - markdown
+  - llm
+  - rag
+  - web-clipper
