@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-11-28
+
+Code in list items and quotes keeps its lines and indentation (P2A-101).
+
+### Fixed
+
+- **A code block in a list item or a quote is code to every cleanup pass** (P2A-101). The passes that clean the
+  Markdown after rendering (spaces, repeated and short lines, punctuation, links) leave code alone, but they knew a
+  code fence only at the start of a line. A list item that opens with a code block has its fence on the marker line
+  (`1. ````), and a quote writes `> ` before every line, so those fences went unseen: quoted code lost its indentation,
+  its repeated and link-shaped lines were collapsed, and two blank lines in it became one `> >` line; a list item that
+  opened with a code block made the passes take its closing fence for an opening one, so every later code block of the
+  page was cleaned as prose (`def f():` / `    return 1` came out as `def f(): return 1`) and the prose between them
+  was left alone as code. A fence is now read as CommonMark 0.31.2 reads it, behind list markers, quote marks and
+  indentation in any nesting, with the rule of `@page2ai/core` 0.4.28: a backtick fence has no backtick after it (a
+  line that opens with a code span is prose), and a fence closes only on a run of its character at least as long with
+  nothing after it.
+- **A code line keeps its trailing spaces and tabs, and a line of spaces keeps them**, as Chrome copies them and as
+  `@page2ai/core` writes them. They were stripped, which also removed the one space that marks an unchanged empty line
+  of a unified diff. Under a list item such a line is indented like the rest of its block.
+- **Two blank lines in a quote stay two quote lines.** The short-line pass joined them into `> >`, an empty quote
+  nested between two paragraphs. Text that only starts with `>` (`>10 PiB`) is joined as before.
+
+Measured in Chrome against the text it copies, judged by a CommonMark reader (markdown-it-py): 45 of 45 synthetic code
+blocks at the top level, in list items, in quotes and in their nestings (1.7.4: 21). On 315 saved pages (the T276
+corpus, the Starlight sample, the T287 live sample): 297 unchanged; 50 code blocks on 13 pages changed, 47 of them are
+now exactly Chrome's copy (1.7.4: none), 49 changed only in trailing spaces and one nginx.org block got its alignment
+back; the other 3 were not Chrome's copy before either (a REPL tooltip, a trailing line of spaces that a block's ends
+drop, and a block whose end the tab-panel pass cuts, P2A-102). Outside code 6 pages changed: the `> >` lines of 4
+pages, two lines no longer joined around a bare `>`, and trailing spaces kept on lines that a CommonMark reader takes
+for an HTML block. A control run of 1.7.4 against itself on the same pages changed none.
+
+### Tests
+
+- `scripts/md-fences.test.mjs` (in CI): every pass, the optional ones switched on, over the renderer's output for code
+  in a list item that opens with it (a bullet, item 10, a nested item), in a quote, a nested quote, a list in a quote
+  and a quote in a list item, a `~~~` fence holding ```` ``` ````, repeated and link-shaped code lines, trailing spaces
+  and a diff, a line that opens with a code span, and a quote's blank lines; the tracker alone on closing fences,
+  markers without a space, and 150 nested quote marks (linear time). 20 of 20 pass; 1.7.4's passes fail 19.
+- `.e2e/e2e-code-blocks.mjs`: a `/containers` route, each block judged against Chrome's copy: a list item that opens
+  with a block, a top-level block after it, a nested item, a quote, a list in a quote, a quote in a list item, a diff
+  under a list item. 21 of 21 pass; the 1.7.4 agent fails 6 of the 7 new cases.
+
 ## [1.7.4] - 2026-11-28
 
 Code blocks come out with the lines Chrome copies from them (P2A-093).
@@ -19,8 +62,10 @@ Code blocks come out with the lines Chrome copies from them (P2A-093).
   (`cd scannerspython fetch_failures.py --selftest…`), in the popup and in the agent script the Agent Bridge uses. The
   same tie glued lines that end in a `<br>` (Docusaurus), and a line-number gutter was printed into the code. A block's
   text is now the text Chrome copies from it: a line starts at an element laid out as a block, a `<br>` breaks the
-  line, a `<p>` leaves a blank line, table cells are separated by a tab, and text Chrome does not copy
-  (`display: none`, `visibility: hidden`, `user-select: none`, such as a line-number gutter or a `$` prompt) is left
+  line, a `<p>` leaves a blank line, table cells are separated by a tab, a newline character between the items of a
+  flex, grid or table container makes no line (Chrome renders no whitespace-only text there; rehype-pretty-code and
+  other Shiki setups lay `<code>` out as a grid of line spans with a newline between them), and text Chrome does not
+  copy (`display: none`, `visibility: hidden`, `user-select: none`, such as a line-number gutter or a `$` prompt) is left
   out; a blank Expressive Code line is one blank line, not the two that `innerText` reads. A block with no layout of
   its own goes by tags, as `@page2ai/core` 0.4.27 does. Measured in Chrome against the text it copies: 30 of 30
   synthetic layouts (1.7.3: 9), and on real pages every Expressive Code block of the Starlight sample.
@@ -28,8 +73,9 @@ Code blocks come out with the lines Chrome copies from them (P2A-093).
 ### Tests
 
 - `.e2e/e2e-code-blocks.mjs` (in CI): Expressive Code lines, a blank line, a gutter, `<br>` lines, spans laid out as
-  blocks, a table, text Chrome does not copy, a block in a closed `<details>`, a block with no layout, and newline and
-  Shiki blocks as the control. 13 of 13 pass; 1.7.3 fails 9.
+  blocks, a grid of line spans, a table, text Chrome does not copy, a block in a closed `<details>`, a block with no
+  layout, and newline and Shiki blocks as the control. 14 of 14 pass; 1.7.3 fails 9 (this line said «13 of 13» until
+  1.7.5: the grid case was added in the same release).
 
 ## [1.7.3] - 2026-11-21
 

@@ -8,6 +8,16 @@ export interface FenceTracker {
   check(trimmedLine: string): boolean;
 }
 
+// A code fence line as CommonMark 0.31.2 (4.5) reads it, also when the renderer writes it behind container prefixes: a
+// list item that opens with a code block puts the fence on the marker line (`1. ````, `- ````), a quote writes `> `
+// before every line, and they nest (`> 1. ````, `   - ````) (P2A-101). Until 1.7.4 only a fence at the start of the
+// trimmed line counted, so quoted code was cleaned as prose (indentation collapsed, blank lines joined into `> >`), and
+// the closing fence of a block opened on a marker line was taken for an opening one: every later code block of the page
+// was cleaned as prose and the prose between them skipped as code. Each space has one place in the pattern (a marker
+// takes none, it only looks ahead), so a line of many prefixes is read in linear time (ledger E-1130; the same pattern
+// as `FENCE_LINE_RE` of @page2ai/core 0.4.28). Group 1 is the fence run, group 2 what follows it.
+const FENCE_LINE_RE = /^(?:[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])))*[ \t]*(`{3,}|~{3,})(.*)$/;
+
 export const createFenceTracker = (): FenceTracker => {
   let inFence = false;
   let fenceChar = '';
@@ -17,16 +27,18 @@ export const createFenceTracker = (): FenceTracker => {
       return inFence;
     },
     check(trimmedLine: string) {
-      const m = trimmedLine.match(/^(`{3,}|~{3,})/);
+      const m = FENCE_LINE_RE.exec(trimmedLine);
       if (!m) return false;
       const g = m[1]!;
       const c = g[0]!;
       const l = g.length;
       if (!inFence) {
+        // A backtick fence's info string holds no backtick: a line that opens with a code span is prose.
+        if (c === '`' && m[2]!.includes('`')) return false;
         inFence = true;
         fenceChar = c;
         fenceLen = l;
-      } else if (c === fenceChar && l >= fenceLen) {
+      } else if (c === fenceChar && l >= fenceLen && !m[2]!.trim()) {
         inFence = false;
         fenceChar = '';
         fenceLen = 0;
@@ -50,8 +62,10 @@ export const normalizeMarkdownPreserveCode = (text: string | null | undefined): 
       blankCount = 0;
       continue;
     }
+    // A code line is the page's text as Chrome copies it: trailing spaces and tabs and a line made of spaces stay (a
+    // unified diff marks an unchanged empty line with one space, P2A-101; @page2ai/core keeps them too).
     if (fence.inFence) {
-      out.push(line.replace(/\s+$/g, ''));
+      out.push(line);
       continue;
     }
 
@@ -123,10 +137,13 @@ export const collapseShortAdjacentLines = (
   let inFrontmatter = false;
   let seenFirstDashes = false;
 
+  // A quote line is structural, a bare `>` too: the renderer writes `> ` for a blank line in a quote, and joining two
+  // of them made `> >`, an empty quote nested between two paragraphs (P2A-101). Text that only starts with `>`
+  // (`>10 PiB`) is joined as before.
   const isStructural = (l: string): boolean => {
     const t = l.trimStart();
     return /^#{1,6}\s/.test(t) || /^[-*+]\s/.test(t) || /^\d+\.\s/.test(t) ||
-      /^>\s/.test(t) || /^\|/.test(t) || /^!\[/.test(t) || /^\[/.test(t) ||
+      /^>(?:\s|$)/.test(t) || /^\|/.test(t) || /^!\[/.test(t) || /^\[/.test(t) ||
       /^<!--/.test(t) || /^<\w/.test(t) || /^[*_]{2}/.test(t) || /^---/.test(t) || /^===/.test(t);
   };
   const flush = () => {

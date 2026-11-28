@@ -12,12 +12,16 @@
 //               with one line per line.
 //  /plain     — blocks whose lines are newline characters, Shiki .line spans and indented code: the output these
 //               always had, line for line (the control).
+//  /containers — blocks in list items and quotes, the fence behind `1. `, `- ` or `> ` (P2A-101): 1.7.4's
+//               post-processing did not see such a fence, so a list item that opens with a block put every later
+//               block of the page out of step (lines joined, indentation lost) and quoted code lost its indentation.
+//               The first case is that item, the second a top-level block after it.
 //
 // Run:  npm i --no-save puppeteer-core
 //       npm run build:agent
 //       node .e2e/e2e-code-blocks.mjs
 // AGENT_FN=<path> runs the suite on another build (the negative control: 1.7.3 must fail the /starlight and /layouts
-// checks and pass /plain).
+// checks and pass /plain; 1.7.4 must fail /containers).
 
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
@@ -106,6 +110,22 @@ const CASES = {
       'const a = 1;\n  const b = 2;'],
     ['one-line', 'a one-line block stays one line', '<pre><code>npm install example-pkg</code></pre>', 'npm install example-pkg'],
   ],
+  '/containers': [
+    ['li-first-block', 'a list item that opens with a code block (the fence on the marker line)',
+      '<ol><li><pre><code>def f():\n    return 1</code></pre></li></ol>', 'def f():\n    return 1'],
+    ['top-level-after', 'a top-level block after that item keeps its indented line and blank lines',
+      '<pre><code>if x:\n    y()\n\n\nz()</code></pre>', 'if x:\n    y()\n\n\nz()'],
+    ['nested-li-first', 'a nested list item that opens with a code block',
+      '<ul><li>One<ul><li><pre><code>a()\n    b()</code></pre></li></ul></li></ul>', 'a()\n    b()'],
+    ['quote', 'quoted code keeps its indentation and its blank lines',
+      '<blockquote><pre><code>def f():\n    return 1\n\n\nx = 2</code></pre></blockquote>', 'def f():\n    return 1\n\n\nx = 2'],
+    ['li-in-quote', 'a list item in a quote that opens with a code block',
+      '<blockquote><ol><li><pre><code>x()\n    y()</code></pre></li></ol></blockquote>', 'x()\n    y()'],
+    ['quote-in-li', 'a quote in a list item',
+      '<ul><li><blockquote><pre><code>x()\n    y()</code></pre></blockquote></li></ul>', 'x()\n    y()'],
+    ['diff-in-li', 'a diff under a list item keeps its one-space line and trailing spaces',
+      '<ul><li>Patch:<pre><code>@@ -1 +1 @@\n a  \n \n-b\n+c</code></pre></li></ul>', '@@ -1 +1 @@\n a  \n \n-b\n+c'],
+  ],
 };
 
 const ROUTES = Object.fromEntries(Object.entries(CASES).map(([route, cases]) => [route,
@@ -144,18 +164,27 @@ const browser = await puppeteer.launch({
   args: ['--no-first-run', '--no-sandbox', '--disable-dev-shm-usage', '--lang=en-US'],
 });
 
-// The fenced block after the `## <id>` heading, without its fence lines.
+// The fenced block after the `## <id>` heading, without its fence lines, inside the list items and quotes that hold it:
+// what stands before the opening fence (indentation, `1. `, `- `, `> `) is the prefix of every later line of the block,
+// a list marker counting as spaces; an empty line, or a quote's bare `>`, is an empty code line. null when a line
+// leaves the container or no fence closes the block.
+const FENCE_PREFIX_RE = /^((?:[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])))*[ \t]*)(`{3,}|~{3,})/;
 const blockAfter = (md, id) => {
   const lines = md.split('\n');
   const h = lines.findIndex((l) => l.trim() === `## ${id}`);
   if (h < 0) return null;
-  const open = lines.findIndex((l, i) => i > h && /^\s*(`{3,}|~{3,})/.test(l));
+  const open = lines.findIndex((l, i) => i > h && FENCE_PREFIX_RE.test(l));
   if (open < 0) return null;
-  const indent = /^\s*/.exec(lines[open])[0].length;
-  const fence = /^\s*(`{3,}|~{3,})/.exec(lines[open])[1];
-  const close = lines.findIndex((l, i) => i > open && l.trim() === fence);
-  if (close < 0) return null;
-  return lines.slice(open + 1, close).map((l) => l.slice(Math.min(indent, /^\s*/.exec(l)[0].length))).join('\n');
+  const [, prefix, fence] = FENCE_PREFIX_RE.exec(lines[open]);
+  const cont = prefix.replace(/[-*+]|\d{1,9}[.)]/g, (m) => ' '.repeat(m.length));
+  const body = [];
+  for (const l of lines.slice(open + 1)) {
+    const rest = l.startsWith(cont) ? l.slice(cont.length) : l === '' || l === cont.trimEnd() ? '' : null;
+    if (rest === null) return null;
+    if (rest.trim() === fence) return body.join('\n');
+    body.push(rest);
+  }
+  return null;
 };
 
 try {
