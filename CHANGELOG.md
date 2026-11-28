@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-11-28
+
+Code blocks come out with the lines Chrome copies from them (P2A-093).
+
+### Fixed
+
+- **A code block's lines are the lines Chrome copies from it** (P2A-093). Expressive Code, the code blocks of every
+  Starlight site (page2ai.net's own pages among them), writes each line as a `<div>` with no newline character between
+  lines. The extension took, out of five candidate texts, the one with the most leading indentation and, on a tie, the
+  page's `textContent`, so a block whose lines were not indented came out as one line
+  (`cd scannerspython fetch_failures.py --selftest…`), in the popup and in the agent script the Agent Bridge uses. The
+  same tie glued lines that end in a `<br>` (Docusaurus), and a line-number gutter was printed into the code. A block's
+  text is now the text Chrome copies from it: a line starts at an element laid out as a block, a `<br>` breaks the
+  line, a `<p>` leaves a blank line, table cells are separated by a tab, and text Chrome does not copy
+  (`display: none`, `visibility: hidden`, `user-select: none`, such as a line-number gutter or a `$` prompt) is left
+  out; a blank Expressive Code line is one blank line, not the two that `innerText` reads. A block with no layout of
+  its own goes by tags, as `@page2ai/core` 0.4.27 does. Measured in Chrome against the text it copies: 30 of 30
+  synthetic layouts (1.7.3: 9), and on real pages every Expressive Code block of the Starlight sample.
+
+### Tests
+
+- `.e2e/e2e-code-blocks.mjs` (in CI): Expressive Code lines, a blank line, a gutter, `<br>` lines, spans laid out as
+  blocks, a table, text Chrome does not copy, a block in a closed `<details>`, a block with no layout, and newline and
+  Shiki blocks as the control. 13 of 13 pass; 1.7.3 fails 9.
+
 ## [1.7.3] - 2026-11-21
 
 The Agent Bridge reads apps that draw their content in animation frames (P2A-084).
